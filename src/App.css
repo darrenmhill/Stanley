@@ -1,0 +1,375 @@
+/* ─── Layout ─────────────────────────────────────────────────────── */
+.app {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ─── Header ─────────────────────────────────────────────────────── */
+.header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.header h1 {
+  font-size: 1.75rem;
+  color: #1a202c;
+  margin: 0 0 0.25rem;
+  line-height: 1.3;
+}
+
+.subtitle {
+  color: #718096;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+/* ─── Input Section ──────────────────────────────────────────────── */
+.input-section {
+  margin-bottom: 1.5rem;
+}
+
+.input-controls {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-sample {
+  background: #4299e1;
+  color: white;
+}
+.btn-sample:hover {
+  background: #3182ce;
+}
+
+.btn-upload {
+  background: #48bb78;
+  color: white;
+  display: inline-flex;
+  align-items: center;
+}
+.btn-upload:hover {
+  background: #38a169;
+}
+
+.btn-validate {
+  background: #805ad5;
+  color: white;
+}
+.btn-validate:hover:not(:disabled) {
+  background: #6b46c1;
+}
+.btn-validate:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.xml-input {
+  width: 100%;
+  min-height: 180px;
+  padding: 0.75rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  resize: vertical;
+  background: #f7fafc;
+  color: #2d3748;
+  box-sizing: border-box;
+}
+
+.xml-input:focus {
+  outline: none;
+  border-color: #4299e1;
+  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.2);
+}
+
+/* ─── Error Banner ───────────────────────────────────────────────── */
+.error-banner {
+  padding: 0.75rem 1rem;
+  background: #fed7d7;
+  color: #c53030;
+  border: 1px solid #feb2b2;
+  border-radius: 6px;
+  margin-bottom: 1.5rem;
+  font-size: 0.875rem;
+}
+
+/* ─── Results Section ────────────────────────────────────────────── */
+.results-section {
+  margin-bottom: 2rem;
+}
+
+.results-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.results-header h2 {
+  font-size: 1.25rem;
+  color: #1a202c;
+  margin: 0;
+}
+
+.action-badge {
+  background: #edf2f7;
+  color: #4a5568;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+/* ─── Summary Cards ──────────────────────────────────────────────── */
+.summary-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.card {
+  padding: 0.75rem;
+  border-radius: 8px;
+  text-align: center;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  font-family: inherit;
+}
+
+.card-num {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.card-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.card-total {
+  background: #edf2f7;
+  color: #2d3748;
+}
+.card-total.active {
+  border-color: #4a5568;
+}
+
+.card-pass {
+  background: #c6f6d5;
+  color: #22543d;
+}
+.card-pass.active {
+  border-color: #38a169;
+}
+
+.card-fail {
+  background: #fed7d7;
+  color: #742a2a;
+}
+.card-fail.active {
+  border-color: #e53e3e;
+}
+
+.card-na {
+  background: #fefcbf;
+  color: #744210;
+}
+.card-na.active {
+  border-color: #d69e2e;
+}
+
+/* ─── Results Table ──────────────────────────────────────────────── */
+.table-wrapper {
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.results-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.results-table th {
+  background: #2d3748;
+  color: white;
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.results-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #e2e8f0;
+  vertical-align: top;
+}
+
+.results-table tbody tr:hover {
+  background: #f7fafc;
+}
+
+/* Row status colors */
+.row-fail {
+  background: #fff5f5;
+}
+.row-na {
+  background: #fffff0;
+}
+
+/* Badges */
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.badge-pass {
+  background: #c6f6d5;
+  color: #22543d;
+}
+
+.badge-fail {
+  background: #fed7d7;
+  color: #c53030;
+}
+
+.badge-na {
+  background: #fefcbf;
+  color: #975a16;
+}
+
+/* Cell styles */
+.mono {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.78rem;
+}
+
+.desc-cell {
+  max-width: 320px;
+  line-height: 1.4;
+}
+
+.expected-cell {
+  max-width: 250px;
+  font-size: 0.78rem;
+  color: #4a5568;
+}
+
+.null-val {
+  color: #a0aec0;
+  font-style: italic;
+}
+
+.no-results {
+  text-align: center;
+  padding: 2rem !important;
+  color: #a0aec0;
+}
+
+/* ─── Footer ─────────────────────────────────────────────────────── */
+.footer {
+  text-align: center;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+  color: #a0aec0;
+  font-size: 0.75rem;
+}
+
+/* ─── Responsive ─────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .summary-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .results-table {
+    font-size: 0.75rem;
+  }
+
+  .desc-cell,
+  .expected-cell {
+    max-width: 200px;
+  }
+}
+
+/* ─── Light/Dark Overrides ───────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  .header h1,
+  .results-header h2 {
+    color: #e2e8f0;
+  }
+
+  .xml-input {
+    background: #1a202c;
+    color: #e2e8f0;
+    border-color: #4a5568;
+  }
+
+  .xml-input:focus {
+    border-color: #63b3ed;
+    box-shadow: 0 0 0 3px rgba(99, 179, 237, 0.2);
+  }
+
+  .table-wrapper {
+    border-color: #4a5568;
+  }
+
+  .results-table td {
+    border-bottom-color: #4a5568;
+  }
+
+  .results-table tbody tr:hover {
+    background: #2d3748;
+  }
+
+  .row-fail {
+    background: rgba(254, 178, 178, 0.08);
+  }
+
+  .row-na {
+    background: rgba(254, 252, 191, 0.05);
+  }
+
+  .expected-cell {
+    color: #a0aec0;
+  }
+}
