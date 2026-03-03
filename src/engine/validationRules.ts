@@ -62,12 +62,20 @@ const MIC_REGEX = /^[A-Z0-9]{4}$/;
 
 const EXIT_ACTIONS = ['TERM', 'EROR', 'POSC'];
 
+// VALU actions require identifiers + valuation data but NOT full product/trade data.
+// Per ASIC Mapping Document v1.1: product/trade fields are C (conditional) for VALU.
+const REDUCED_DATA_ACTIONS = ['VALU'];
+
 function val(v: string | null | undefined): string | null {
   return v && v.trim() !== '' ? v.trim() : null;
 }
 
 function isExitAction(actionType: string | null): boolean {
   return !!actionType && EXIT_ACTIONS.includes(actionType);
+}
+
+function isReducedAction(actionType: string | null): boolean {
+  return !!actionType && REDUCED_DATA_ACTIONS.includes(actionType);
 }
 
 function mandatory(
@@ -102,6 +110,12 @@ function conditionalMandatory(
   if (isExitAction(actionType)) {
     return { ruleId, field, category, description,
       severity: 'WARNING', status: 'N/A', actual: val(value), expected: naMessage };
+  }
+  if (isReducedAction(actionType)) {
+    const v = val(value);
+    return { ruleId, field, category, description,
+      severity: 'WARNING', status: v ? 'PASS' : 'N/A', actual: v,
+      expected: 'Conditional for VALU actions' };
   }
   return mandatory(ruleId, field, category, description, value);
 }
@@ -788,12 +802,23 @@ function buildDateRules(): RuleFn[] {
 function buildClearingRules(): RuleFn[] {
   const rules: RuleFn[] = [];
 
-  // ASIC-056: Cleared status — Mandatory for non-exit
+  // ASIC-056: Cleared status — Mandatory for non-exit (conditional for VALU)
   rules.push((r) => {
     if (isExitAction(r.actionType)) {
       return na('ASIC-056', 'Clrd', 'Clearing & Trading',
         'Cleared status is mandatory for non-exit action types',
         r.fields.get('Clrd') ?? null, 'N/A for exit actions');
+    }
+    if (isReducedAction(r.actionType)) {
+      const v = val(r.fields.get('Clrd'));
+      if (!v) {
+        return na('ASIC-056', 'Clrd', 'Clearing & Trading',
+          'Cleared status is mandatory for non-exit action types',
+          null, 'Conditional for VALU actions');
+      }
+      return allowedValues('ASIC-056', 'Clrd', 'Clearing & Trading',
+        'Cleared status must be Y (Yes), N (No), or I (Intend to clear) if reported',
+        v, ['Y', 'N', 'I']);
     }
     return allowedValues('ASIC-056', 'Clrd', 'Clearing & Trading',
       'Cleared status is mandatory: Y (Yes), N (No), or I (Intend to clear)',
@@ -1055,6 +1080,11 @@ function buildNotionalRules(): RuleFn[] {
         'Notional Amount Leg 1 is always mandatory for FX (CURR) derivatives',
         ntnl1, 'Applicable only for CURR asset class');
     }
+    if (isReducedAction(r.actionType)) {
+      return na('ASIC-077', 'NtnlAmt1', 'Notional & Quantity',
+        'Notional Amount Leg 1 is always mandatory for FX (CURR) derivatives',
+        ntnl1, 'Conditional for VALU actions');
+    }
     return {
       ruleId: 'ASIC-077', field: 'NtnlAmt1', category: 'Notional & Quantity',
       description: 'Notional Amount Leg 1 is always mandatory for FX (CURR) derivatives',
@@ -1072,6 +1102,11 @@ function buildNotionalRules(): RuleFn[] {
       return na('ASIC-078', 'NtnlAmt2', 'Notional & Quantity',
         'Notional Amount Leg 2 is mandatory for FX (CURR) derivatives',
         ntnl2, 'Applicable only for CURR asset class');
+    }
+    if (isReducedAction(r.actionType)) {
+      return na('ASIC-078', 'NtnlAmt2', 'Notional & Quantity',
+        'Notional Amount Leg 2 is mandatory for FX (CURR) derivatives',
+        ntnl2, 'Conditional for VALU actions');
     }
     return {
       ruleId: 'ASIC-078', field: 'NtnlAmt2', category: 'Notional & Quantity',
@@ -1162,6 +1197,11 @@ function buildPriceRules(): RuleFn[] {
         'Strike Price is mandatory when Contract Type is OPTN',
         sp, 'Applicable only when CtrctTp = OPTN');
     }
+    if (isReducedAction(r.actionType)) {
+      return na('ASIC-087', 'StrkPric', 'Price',
+        'Strike Price is mandatory when Contract Type is OPTN',
+        sp, 'Conditional for VALU actions');
+    }
     return {
       ruleId: 'ASIC-087', field: 'StrkPric', category: 'Price',
       description: 'Strike Price is mandatory when Contract Type is OPTN',
@@ -1179,6 +1219,11 @@ function buildPriceRules(): RuleFn[] {
       return na('ASIC-088', 'OptnTp', 'Price',
         'Option Type (CALL/PUTO) is mandatory when Contract Type is OPTN',
         ot, 'Applicable only when CtrctTp = OPTN');
+    }
+    if (isReducedAction(r.actionType)) {
+      return na('ASIC-088', 'OptnTp', 'Price',
+        'Option Type (CALL/PUTO) is mandatory when Contract Type is OPTN',
+        ot, 'Conditional for VALU actions');
     }
     return {
       ruleId: 'ASIC-088', field: 'OptnTp', category: 'Price',
@@ -1211,6 +1256,11 @@ function buildPriceRules(): RuleFn[] {
       return na('ASIC-091', 'OptnExrcStyle', 'Price',
         'Option Exercise Style is mandatory when Contract Type is OPTN',
         es, 'Applicable only when CtrctTp = OPTN');
+    }
+    if (isReducedAction(r.actionType)) {
+      return na('ASIC-091', 'OptnExrcStyle', 'Price',
+        'Option Exercise Style is mandatory when Contract Type is OPTN',
+        es, 'Conditional for VALU actions');
     }
     return {
       ruleId: 'ASIC-091', field: 'OptnExrcStyle', category: 'Price',

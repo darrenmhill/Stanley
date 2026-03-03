@@ -403,10 +403,14 @@ export function parseAllTradeReports(xml: string): { index: number; report: Pars
     throw new Error('No <TradData> elements found in the XML document.');
   }
 
-  return tradDataElements.map((tradDataEl, index) => ({
-    index,
-    report: parseTradDataElement(tradDataEl, xml, doc),
-  }));
+  return tradDataElements.map((tradDataEl, index) => {
+    try {
+      return { index, report: parseTradDataElement(tradDataEl, xml, doc) };
+    } catch {
+      // Return a minimal report for malformed trade elements so other trades still display
+      return { index, report: { raw: xml, doc, actionType: null, fields: new Map<string, string | null>() } as ParsedReport };
+    }
+  });
 }
 
 /**
