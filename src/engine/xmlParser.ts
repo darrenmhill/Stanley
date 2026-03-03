@@ -387,25 +387,15 @@ export function parseAllTradeReports(xml: string): { index: number; report: Pars
     throw new Error(`XML Parse Error: ${parseError.textContent}`);
   }
 
-  const root =
-    doc.getElementsByTagNameNS(NS, 'DerivsTradRpt')[0] ??
-    doc.getElementsByTagName('DerivsTradRpt')[0] ??
-    doc.documentElement;
+  const reportElements = getAllReportElements(doc);
 
-  const tradDataElements = [
-    ...Array.from(root.getElementsByTagNameNS(NS, 'TradData')),
-    ...(root.getElementsByTagNameNS(NS, 'TradData').length === 0
-      ? Array.from(root.getElementsByTagName('TradData'))
-      : []),
-  ];
-
-  if (tradDataElements.length === 0) {
+  if (reportElements.length === 0) {
     throw new Error('No <TradData> elements found in the XML document.');
   }
 
-  return tradDataElements.map((tradDataEl, index) => {
+  return reportElements.map((el, index) => {
     try {
-      return { index, report: parseTradDataElement(tradDataEl, xml, doc) };
+      return { index, report: parseTradDataElement(el, xml, doc) };
     } catch {
       // Return a minimal report for malformed trade elements so other trades still display
       return { index, report: { raw: xml, doc, actionType: null, fields: new Map<string, string | null>() } as ParsedReport };
@@ -479,21 +469,46 @@ export const FIELD_PATHS: Record<string, { base: 'action' | 'counterparty' | 'co
 };
 
 /**
- * Collect all TradData elements from parsed XML, respecting namespaces.
+ * Collect all individual report elements from parsed XML.
+ * Per the ISO 20022 XSD, a TradData can contain multiple Rpt elements
+ * (maxOccurs=unbounded). This function expands them so every Rpt is
+ * returned as a separate entry, ensuring all trades in the file are processed.
+ *
+ * Returns TradData when it contains zero or one Rpt (backward compatible),
+ * and individual Rpt elements when a TradData contains multiple Rpt children.
  */
-function getAllTradDataElements(doc: Document): Element[] {
+function getAllReportElements(doc: Document): Element[] {
   const root =
     doc.getElementsByTagNameNS(NS, 'DerivsTradRpt')[0] ??
     doc.getElementsByTagName('DerivsTradRpt')[0] ??
     doc.documentElement;
 
   const nsElements = Array.from(root.getElementsByTagNameNS(NS, 'TradData'));
-  return nsElements.length > 0 ? nsElements : Array.from(root.getElementsByTagName('TradData'));
+  const tradDataElements = nsElements.length > 0
+    ? nsElements
+    : Array.from(root.getElementsByTagName('TradData'));
+
+  const reportElements: Element[] = [];
+  for (const tradDataEl of tradDataElements) {
+    const rptChildren = Array.from(tradDataEl.children).filter(
+      (child) => child.localName === 'Rpt',
+    );
+    if (rptChildren.length <= 1) {
+      // Zero or one Rpt — process TradData as a single report (original behavior)
+      reportElements.push(tradDataEl);
+    } else {
+      // Multiple Rpt elements under one TradData — expand to individual reports
+      for (const rpt of rptChildren) {
+        reportElements.push(rpt);
+      }
+    }
+  }
+  return reportElements;
 }
 
 /**
  * Update a field value in the raw XML string.
- * tradeIndex specifies which TradData element to target (default 0).
+ * tradeIndex specifies which report element to target (default 0).
  */
 export function updateFieldInXml(xml: string, fieldName: string, newValue: string, tradeIndex: number = 0): string {
   const pathDef = FIELD_PATHS[fieldName];
@@ -502,11 +517,11 @@ export function updateFieldInXml(xml: string, fieldName: string, newValue: strin
   const parser = new DOMParser();
   const doc = parser.parseFromString(xml, 'text/xml');
 
-  const tradDataElements = getAllTradDataElements(doc);
-  const tradData = tradDataElements[tradeIndex];
-  if (!tradData) return xml;
+  const reportElements = getAllReportElements(doc);
+  const reportEl = reportElements[tradeIndex];
+  if (!reportEl) return xml;
 
-  const actionContainer = findActionContainer(tradData);
+  const actionContainer = findActionContainer(reportEl);
   const actionEl = findActionElement(actionContainer);
   if (!actionEl) return xml;
 

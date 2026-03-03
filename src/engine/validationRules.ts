@@ -428,15 +428,22 @@ function buildIdentifierRules(): RuleFn[] {
     };
   });
 
-  // ASIC-025: Prior UTI mandatory for non-NEWT actions
+  // ASIC-025: Prior UTI mandatory for non-NEWT actions (conditional for VALU)
   rules.push((r) => {
     if (!r.actionType || r.actionType === 'NEWT') {
       return na('ASIC-025', 'PrrUTI', 'Identifier',
-        'Prior UTI is mandatory for MODI, CORR, TERM, REVI, VALU, EROR, POSC actions',
-        val(r.fields.get('PrrUTI')), 'Required for non-NEWT actions');
+        'Prior UTI is mandatory for MODI, CORR, TERM, REVI, EROR, POSC actions',
+        val(r.fields.get('PrrUTI')), 'N/A for NEWT actions');
+    }
+    if (isReducedAction(r.actionType)) {
+      const v = val(r.fields.get('PrrUTI'));
+      return { ruleId: 'ASIC-025', field: 'PrrUTI', category: 'Identifier',
+        description: 'Prior UTI is mandatory for MODI, CORR, TERM, REVI, EROR, POSC actions',
+        severity: 'WARNING', status: v ? 'PASS' : 'N/A', actual: v,
+        expected: 'Conditional for VALU actions' };
     }
     return mandatory('ASIC-025', 'PrrUTI', 'Identifier',
-      'Prior UTI is mandatory for MODI, CORR, TERM, REVI, VALU, EROR, POSC actions',
+      'Prior UTI is mandatory for MODI, CORR, TERM, REVI, EROR, POSC actions',
       r.fields.get('PrrUTI'));
   });
 
