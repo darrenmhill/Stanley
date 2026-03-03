@@ -550,6 +550,189 @@
   background: #cbd5e0;
 }
 
+/* ─── Aggregate Statistics Section ───────────────────────────────── */
+.aggregate-section {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.aggregate-header h2 {
+  font-size: 1.25rem;
+  color: #1a202c;
+  margin: 0 0 0.75rem;
+}
+
+.aggregate-cards {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.agg-card {
+  padding: 0.6rem 0.4rem;
+  border-radius: 6px;
+  text-align: center;
+  background: white;
+  border: 1px solid #e2e8f0;
+}
+
+.agg-card-valid {
+  background: #f0fff4;
+  border-color: #c6f6d5;
+}
+
+.agg-card-errors {
+  background: #fff5f5;
+  border-color: #fed7d7;
+}
+
+.agg-card-rate {
+  background: #ebf8ff;
+  border-color: #bee3f8;
+}
+
+.agg-num {
+  display: block;
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #2d3748;
+}
+
+.agg-card-valid .agg-num {
+  color: #22543d;
+}
+
+.agg-card-errors .agg-num {
+  color: #c53030;
+}
+
+.agg-card-rate .agg-num {
+  color: #2b6cb0;
+}
+
+.agg-label {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #718096;
+  margin-top: 0.2rem;
+}
+
+.category-breakdown h3 {
+  font-size: 0.9rem;
+  color: #4a5568;
+  margin: 0.75rem 0 0.5rem;
+}
+
+.category-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.category-table th {
+  background: #edf2f7;
+  color: #4a5568;
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-bottom: 2px solid #cbd5e0;
+}
+
+.category-table td {
+  padding: 0.35rem 0.6rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.category-table tbody tr:hover {
+  background: #edf2f7;
+}
+
+/* ─── Rules Reference Section ───────────────────────────────────── */
+.btn-rules-ref {
+  background: #667eea;
+  color: white;
+}
+.btn-rules-ref:hover {
+  background: #5a67d8;
+}
+
+.rules-ref-section {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.rules-ref-section h2 {
+  font-size: 1.25rem;
+  color: #1a202c;
+  margin: 0 0 0.25rem;
+}
+
+.rules-ref-subtitle {
+  color: #718096;
+  font-size: 0.82rem;
+  margin: 0 0 1rem;
+}
+
+.rules-ref-category {
+  margin-bottom: 1rem;
+}
+
+.rules-ref-category h3 {
+  font-size: 0.95rem;
+  color: #2d3748;
+  margin: 0.75rem 0 0.4rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.rules-ref-count {
+  font-weight: 400;
+  color: #718096;
+  font-size: 0.82rem;
+}
+
+.rules-ref-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.rules-ref-table th {
+  background: #edf2f7;
+  color: #4a5568;
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-bottom: 2px solid #cbd5e0;
+}
+
+.rules-ref-table td {
+  padding: 0.35rem 0.6rem;
+  border-bottom: 1px solid #e2e8f0;
+  vertical-align: top;
+}
+
+.rules-ref-table tbody tr:hover {
+  background: #edf2f7;
+}
+
 /* ─── Footer ─────────────────────────────────────────────────────── */
 .footer {
   text-align: center;
@@ -576,6 +759,10 @@
 
   .trades-grid-wrapper {
     max-height: 300px;
+  }
+
+  .aggregate-cards {
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 
@@ -680,5 +867,70 @@
 
   .trades-stats {
     color: #a0aec0;
+  }
+
+  .aggregate-section,
+  .rules-ref-section {
+    background: #1a202c;
+    border-color: #4a5568;
+  }
+
+  .aggregate-header h2,
+  .rules-ref-section h2 {
+    color: #e2e8f0;
+  }
+
+  .agg-card {
+    background: #2d3748;
+    border-color: #4a5568;
+  }
+
+  .agg-card-valid {
+    background: rgba(56, 161, 105, 0.12);
+    border-color: #276749;
+  }
+
+  .agg-card-errors {
+    background: rgba(229, 62, 62, 0.12);
+    border-color: #9b2c2c;
+  }
+
+  .agg-card-rate {
+    background: rgba(66, 153, 225, 0.12);
+    border-color: #2b6cb0;
+  }
+
+  .agg-num {
+    color: #e2e8f0;
+  }
+
+  .agg-label {
+    color: #a0aec0;
+  }
+
+  .category-table th,
+  .rules-ref-table th {
+    background: #2d3748;
+    color: #a0aec0;
+    border-bottom-color: #4a5568;
+  }
+
+  .category-table td,
+  .rules-ref-table td {
+    border-bottom-color: #4a5568;
+  }
+
+  .category-table tbody tr:hover,
+  .rules-ref-table tbody tr:hover {
+    background: #2d3748;
+  }
+
+  .category-breakdown h3 {
+    color: #a0aec0;
+  }
+
+  .rules-ref-category h3 {
+    color: #e2e8f0;
+    border-bottom-color: #4a5568;
   }
 }

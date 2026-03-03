@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { parseAllTradeReports, updateFieldInXml, FIELD_PATHS, type ParsedReport } from './engine/xmlParser';
-import { validateReport, type ValidationResult } from './engine/validationRules';
+import { validateReport, type ValidationResult, type RuleCategory } from './engine/validationRules';
 import { SAMPLE_XML } from './engine/sampleXml';
 import './App.css';
 
@@ -18,7 +18,7 @@ const GRID_FIELDS = [
   { key: 'UTI', label: 'UTI', truncate: 24 },
   { key: 'AsstClss', label: 'Asset' },
   { key: 'CtrctTp', label: 'Contract' },
-  { key: 'CtrPty1.Drctn', label: 'Dir' },
+  { key: 'DrctnLeg1', label: 'Dir' },
   { key: 'NtnlAmt1', label: 'Notional', numeric: true },
   { key: 'NtnlCcy1', label: 'Ccy' },
   { key: 'FctvDt', label: 'Eff. Date' },
@@ -35,6 +35,21 @@ function formatNotional(v: string | null | undefined): string {
   return n.toFixed(2);
 }
 
+// Rule category definitions for the rules reference section
+const RULE_CATEGORIES: { category: RuleCategory; range: string; description: string }[] = [
+  { category: 'Counterparty', range: 'ASIC-001 to ASIC-020', description: 'Reporting entity, CP1/CP2 LEI, beneficiary, broker, execution agent, clearing member, submitting agent, direction, nature' },
+  { category: 'Identifier', range: 'ASIC-021 to ASIC-030', description: 'UTI format/length/characters, prior UTI, UTI != Prior UTI, event ID, secondary TX ID' },
+  { category: 'Product', range: 'ASIC-031 to ASIC-040', description: 'UPI (ISO 4914), contract type, asset class, CFI, settlement currency, underlier' },
+  { category: 'Date & Timestamp', range: 'ASIC-041 to ASIC-055', description: 'Execution/effective/expiration/maturity/reporting timestamps, timezone checks, cross-field date validations' },
+  { category: 'Clearing & Trading', range: 'ASIC-056 to ASIC-065', description: 'Cleared status, CCP LEI, platform identifier (MIC), clearing member, non-cleared reason, master agreement' },
+  { category: 'Notional & Quantity', range: 'ASIC-066 to ASIC-078', description: 'Notional amounts/currencies for both legs, numeric/non-negative checks, FX-specific requirements' },
+  { category: 'Price', range: 'ASIC-079 to ASIC-095', description: 'Price, fixed rates, spreads, strike price, option type/exercise style/premium, exchange rate' },
+  { category: 'Valuation', range: 'ASIC-096 to ASIC-105', description: 'Valuation amount/currency/timestamp, delta range, VALU action mandates, valuation type' },
+  { category: 'Action & Event', range: 'ASIC-106 to ASIC-118', description: 'Action type detection, event type per-action cross-validation, EROR/POSC/REVI checks' },
+  { category: 'Collateral', range: 'ASIC-119 to ASIC-124', description: 'Initial/variation margin posted/received, portfolio code' },
+  { category: 'Package', range: 'ASIC-125 to ASIC-130', description: 'Package ID, package price/spread, IRS fixed rate/spread checks, FX exchange rate' },
+];
+
 function App() {
   const [xml, setXml] = useState('');
   const [trades, setTrades] = useState<TradeEntry[] | null>(null);
@@ -43,6 +58,7 @@ function App() {
   const [filter, setFilter] = useState<FilterStatus>('ALL');
   const [showXml, setShowXml] = useState(false);
   const [validationKey, setValidationKey] = useState(0);
+  const [showRulesRef, setShowRulesRef] = useState(false);
 
   // Grid inline editing state
   const [gridEditCell, setGridEditCell] = useState<{ row: number; field: string } | null>(null);
@@ -182,6 +198,52 @@ function App() {
       }
     : null;
 
+  // ─── Aggregate statistics across all trades ─────────────
+  const aggregateStats = useMemo(() => {
+    if (!trades) return null;
+    let totalRules = 0;
+    let totalPass = 0;
+    let totalFail = 0;
+    let totalNa = 0;
+    const categoryBreakdown = new Map<RuleCategory, { pass: number; fail: number; na: number }>();
+
+    for (const trade of trades) {
+      for (const r of trade.validation) {
+        totalRules++;
+        if (r.status === 'PASS') totalPass++;
+        else if (r.status === 'FAIL') totalFail++;
+        else totalNa++;
+
+        if (!categoryBreakdown.has(r.category)) {
+          categoryBreakdown.set(r.category, { pass: 0, fail: 0, na: 0 });
+        }
+        const cat = categoryBreakdown.get(r.category)!;
+        if (r.status === 'PASS') cat.pass++;
+        else if (r.status === 'FAIL') cat.fail++;
+        else cat.na++;
+      }
+    }
+
+    const passRate = totalRules > 0 ? ((totalPass / (totalPass + totalFail)) * 100).toFixed(1) : '0';
+
+    return { totalRules, totalPass, totalFail, totalNa, passRate, categoryBreakdown };
+  }, [trades]);
+
+  // ─── Rules by category (from actual validation results) ──
+  const rulesByCategory = useMemo(() => {
+    if (!trades || trades.length === 0) return null;
+    // Use the first trade to get the full rule list structure
+    const firstTrade = trades[0];
+    const grouped = new Map<RuleCategory, ValidationResult[]>();
+    for (const r of firstTrade.validation) {
+      if (!grouped.has(r.category)) {
+        grouped.set(r.category, []);
+      }
+      grouped.get(r.category)!.push(r);
+    }
+    return grouped;
+  }, [trades]);
+
   return (
     <div className="app">
       <header className="header">
@@ -211,6 +273,9 @@ function App() {
           <button className="btn btn-toggle-xml" onClick={() => setShowXml(!showXml)}>
             {showXml ? 'Hide XML' : 'Show XML'}
           </button>
+          <button className="btn btn-rules-ref" onClick={() => setShowRulesRef(!showRulesRef)}>
+            {showRulesRef ? 'Hide Rules' : 'Rules Reference'}
+          </button>
         </div>
         {showXml && (
           <textarea
@@ -227,6 +292,134 @@ function App() {
         <div className="error-banner">
           <strong>Error:</strong> {error}
         </div>
+      )}
+
+      {/* ─── Top-Level Aggregate Statistics ────────────────── */}
+      {trades && tradeSummary && aggregateStats && (
+        <section className="aggregate-section">
+          <div className="aggregate-header">
+            <h2>File Summary</h2>
+          </div>
+          <div className="aggregate-cards">
+            <div className="agg-card">
+              <span className="agg-num">{tradeSummary.total}</span>
+              <span className="agg-label">Total Trades</span>
+            </div>
+            <div className="agg-card agg-card-valid">
+              <span className="agg-num">{tradeSummary.valid}</span>
+              <span className="agg-label">Valid</span>
+            </div>
+            <div className="agg-card agg-card-errors">
+              <span className="agg-num">{tradeSummary.withErrors}</span>
+              <span className="agg-label">With Errors</span>
+            </div>
+            <div className="agg-card">
+              <span className="agg-num">{aggregateStats.totalRules.toLocaleString()}</span>
+              <span className="agg-label">Rules Checked</span>
+            </div>
+            <div className="agg-card agg-card-valid">
+              <span className="agg-num">{aggregateStats.totalPass.toLocaleString()}</span>
+              <span className="agg-label">Passed</span>
+            </div>
+            <div className="agg-card agg-card-errors">
+              <span className="agg-num">{aggregateStats.totalFail.toLocaleString()}</span>
+              <span className="agg-label">Failed</span>
+            </div>
+            <div className="agg-card">
+              <span className="agg-num">{aggregateStats.totalNa.toLocaleString()}</span>
+              <span className="agg-label">N/A</span>
+            </div>
+            <div className="agg-card agg-card-rate">
+              <span className="agg-num">{aggregateStats.passRate}%</span>
+              <span className="agg-label">Pass Rate</span>
+            </div>
+          </div>
+          <div className="category-breakdown">
+            <h3>Results by Category</h3>
+            <table className="category-table">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Passed</th>
+                  <th>Failed</th>
+                  <th>N/A</th>
+                  <th>Pass Rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {RULE_CATEGORIES.map(({ category }) => {
+                  const stats = aggregateStats.categoryBreakdown.get(category);
+                  if (!stats) return null;
+                  const catTotal = stats.pass + stats.fail;
+                  const rate = catTotal > 0 ? ((stats.pass / catTotal) * 100).toFixed(1) : '—';
+                  return (
+                    <tr key={category}>
+                      <td>{category}</td>
+                      <td className="mono stat-valid">{stats.pass.toLocaleString()}</td>
+                      <td className="mono stat-errors">{stats.fail.toLocaleString()}</td>
+                      <td className="mono">{stats.na.toLocaleString()}</td>
+                      <td className="mono">{rate}%</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* ─── Rules Reference Section ──────────────────────── */}
+      {showRulesRef && (
+        <section className="rules-ref-section">
+          <h2>Validation Rules Reference</h2>
+          <p className="rules-ref-subtitle">130 rules across 11 categories — ASIC Schedule 1 Technical Guidance (2024)</p>
+          {rulesByCategory ? (
+            // Show actual rules from validation results
+            Array.from(rulesByCategory.entries()).map(([category, rules]) => (
+              <div key={category} className="rules-ref-category">
+                <h3>{category} <span className="rules-ref-count">({rules.length} rules)</span></h3>
+                <table className="rules-ref-table">
+                  <thead>
+                    <tr>
+                      <th>Rule ID</th>
+                      <th>Field</th>
+                      <th>Description</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rules.map((r) => (
+                      <tr key={r.ruleId}>
+                        <td className="mono">{r.ruleId}</td>
+                        <td className="mono">{r.field}</td>
+                        <td>{r.description}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))
+          ) : (
+            // Show category summary when no data is loaded
+            <table className="rules-ref-table">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Rules</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                {RULE_CATEGORIES.map(({ category, range, description }) => (
+                  <tr key={category}>
+                    <td>{category}</td>
+                    <td className="mono">{range}</td>
+                    <td>{description}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
       )}
 
       {/* ─── Trades Grid ────────────────────────────────────── */}

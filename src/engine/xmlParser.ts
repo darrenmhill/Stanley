@@ -278,6 +278,9 @@ function parseTradDataElement(tradData: Element, xml: string, doc: Document): Pa
               getAttributeValue(txData, 'Ccy', 'TxPric', 'Pric', 'MntryVal', 'Amt')) : null);
   fields.set('PricNtn',
     txData ? getTextContent(txData, 'TxPric', 'Pric', 'BsisPtSprd') : null);
+  // Flag to indicate price was reported as monetary (not decimal rate)
+  fields.set('PricIsMntry',
+    txData && getElement(txData, 'TxPric', 'Pric', 'MntryVal') ? 'true' : null);
 
   // Interest Rates
   fields.set('FxdRate1',

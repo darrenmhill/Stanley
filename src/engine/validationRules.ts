@@ -1106,17 +1106,17 @@ function buildPriceRules(): RuleFn[] {
     const pric = val(r.fields.get('Pric'));
     const pricCcy = val(r.fields.get('PricCcy'));
     const pricNtn = val(r.fields.get('PricNtn'));
-    // If price is a basis point spread, currency is not needed
-    if (!pric || pricNtn) {
+    const isMntry = val(r.fields.get('PricIsMntry'));
+    // Skip: no price, basis point spread, or decimal rate (not monetary)
+    if (!pric || pricNtn || !isMntry) {
       return na('ASIC-081', 'PricCcy', 'Price',
         'Price Currency is mandatory when price is a monetary value',
-        pricCcy, 'Required for monetary price');
+        pricCcy, 'Required for monetary price (not decimal rates)');
     }
-    // This is a soft check — price could be a decimal rate
     return {
       ruleId: 'ASIC-081', field: 'PricCcy', category: 'Price',
       description: 'Price Currency is mandatory when price is a monetary value',
-      severity: 'WARNING',
+      severity: 'ERROR',
       status: pricCcy ? 'PASS' : 'FAIL',
       actual: pricCcy,
       expected: 'ISO 4217 currency code',

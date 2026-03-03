@@ -1,6 +1,6 @@
 /**
  * Sample XML generator for ASIC Derivative Reporting Validator.
- * Generates 100+ trades with real GLEIF LEIs and ~25% deliberate errors.
+ * Generates 100 trades: 75 fully valid + 25 with deliberate errors for testing.
  *
  * Structure per ASIC ISO 20022 Mapping Document v1.1 (Feb 2025):
  *   DerivsTradRpt > TradData > Rpt > {Action} > {
@@ -82,45 +82,63 @@ const ASSET_CLASSES = ['INTR', 'CRDT', 'EQUI', 'COMM', 'CURR'] as const;
 const CONTRACT_TYPES = ['SWAP', 'OPTN', 'FUTR', 'FORW', 'FRAS', 'CFDS'] as const;
 const CURRENCIES = ['AUD', 'USD', 'EUR', 'GBP', 'JPY', 'SGD', 'HKD'] as const;
 const DIRECTIONS = ['BYER', 'SLLR'] as const;
-const EVENT_TYPES_NEWT = ['TRAD', 'NOVA', 'COMP', 'CLRG', 'ALOC', 'INCP'] as const;
-const EVENT_TYPES_OTHER = ['TRAD', 'NOVA', 'COMP', 'ETRM', 'EXER', 'UPDT', 'CORP'] as const;
 const MASTER_AGREE = ['ISDA', 'CMAM', 'DERV', 'OTHR'] as const;
 const EXERCISE_STYLES = ['AMER', 'EURO', 'BERM'] as const;
 const MIC_CODES = ['XASX', 'XSFE', 'XCHI', 'XXXX'] as const;
 const COUNTRIES = ['AU', 'US', 'GB', 'JP', 'SG', 'HK', 'NZ', 'DE'] as const;
 
+// Correct event types per action type per ASIC mapping
+const EVENT_TYPES_BY_ACTION: Record<string, readonly string[]> = {
+  NEWT: ['TRAD', 'NOVA', 'COMP', 'CLRG', 'ALOC', 'INCP', 'UPDT'],
+  MODI: ['TRAD', 'NOVA', 'COMP', 'UPDT', 'CPUP', 'CORP'],
+  CORR: ['TRAD', 'NOVA', 'COMP', 'CLRG', 'ALOC', 'INCP', 'UPDT', 'CPUP', 'CORP'],
+  TERM: ['ETRM', 'EXER', 'COMP', 'CLRG', 'CORP'],
+  VALU: ['TRAD'],
+  EROR: ['TRAD'],
+  REVI: ['TRAD', 'NOVA', 'COMP', 'UPDT', 'CPUP', 'CORP'],
+};
+
 // ─── Error injection schedule ───────────────────────────────────────
+// Trades 0-74: valid, Trades 75-99: deliberate errors
 interface ErrorSpec {
   tradeIdx: number;
   type: string;
 }
 
 const ERROR_SCHEDULE: ErrorSpec[] = [
-  { tradeIdx: 3, type: 'bad_lei' },
-  { tradeIdx: 17, type: 'bad_lei' },
-  { tradeIdx: 41, type: 'bad_lei' },
-  { tradeIdx: 78, type: 'bad_lei' },
-  { tradeIdx: 7, type: 'mat_before_eff' },
-  { tradeIdx: 29, type: 'mat_before_eff' },
-  { tradeIdx: 55, type: 'mat_before_eff' },
-  { tradeIdx: 88, type: 'mat_before_eff' },
-  { tradeIdx: 11, type: 'bad_notional' },
-  { tradeIdx: 45, type: 'bad_notional' },
-  { tradeIdx: 72, type: 'bad_notional' },
-  { tradeIdx: 15, type: 'bad_delta' },
-  { tradeIdx: 52, type: 'bad_delta' },
-  { tradeIdx: 91, type: 'bad_delta' },
-  { tradeIdx: 20, type: 'missing_ccp' },
-  { tradeIdx: 60, type: 'missing_ccp' },
-  { tradeIdx: 85, type: 'missing_ccp' },
-  { tradeIdx: 25, type: 'bad_uti' },
-  { tradeIdx: 68, type: 'bad_uti' },
-  { tradeIdx: 33, type: 'bad_currency' },
-  { tradeIdx: 76, type: 'bad_currency' },
-  { tradeIdx: 37, type: 'bad_country' },
+  // Single errors (trades 75-94)
+  { tradeIdx: 75, type: 'bad_lei' },
+  { tradeIdx: 76, type: 'mat_before_eff' },
+  { tradeIdx: 77, type: 'bad_notional' },
+  { tradeIdx: 78, type: 'bad_delta' },
+  { tradeIdx: 79, type: 'missing_ccp' },
+  { tradeIdx: 80, type: 'bad_uti' },
+  { tradeIdx: 81, type: 'bad_currency' },
   { tradeIdx: 82, type: 'bad_country' },
-  { tradeIdx: 48, type: 'missing_upi' },
-  { tradeIdx: 95, type: 'bad_contract' },
+  { tradeIdx: 83, type: 'missing_upi' },
+  { tradeIdx: 84, type: 'bad_contract' },
+  { tradeIdx: 85, type: 'bad_lei' },
+  { tradeIdx: 86, type: 'mat_before_eff' },
+  { tradeIdx: 87, type: 'bad_notional' },
+  { tradeIdx: 88, type: 'bad_delta' },
+  { tradeIdx: 89, type: 'missing_ccp' },
+  { tradeIdx: 90, type: 'bad_uti' },
+  { tradeIdx: 91, type: 'bad_currency' },
+  { tradeIdx: 92, type: 'bad_country' },
+  { tradeIdx: 93, type: 'missing_upi' },
+  { tradeIdx: 94, type: 'bad_contract' },
+  // Multiple errors (trades 95-99)
+  { tradeIdx: 95, type: 'bad_lei' },
+  { tradeIdx: 95, type: 'mat_before_eff' },
+  { tradeIdx: 96, type: 'bad_notional' },
+  { tradeIdx: 96, type: 'bad_currency' },
+  { tradeIdx: 97, type: 'bad_delta' },
+  { tradeIdx: 97, type: 'missing_ccp' },
+  { tradeIdx: 98, type: 'bad_uti' },
+  { tradeIdx: 98, type: 'bad_country' },
+  { tradeIdx: 99, type: 'bad_lei' },
+  { tradeIdx: 99, type: 'bad_notional' },
+  { tradeIdx: 99, type: 'bad_delta' },
 ];
 
 function getErrorsForTrade(idx: number): Set<string> {
@@ -169,6 +187,8 @@ function generateSingleTrade(idx: number): string {
   const errors = getErrorsForTrade(idx);
   const action = pickWeighted();
   const isExit = ['TERM', 'EROR', 'POSC'].includes(action.code);
+  const isError = action.code === 'EROR';
+  const isNonNewt = action.code !== 'NEWT';
 
   const rptgLei = pick(LEI_POOL);
   let othrLei = pick(LEI_POOL);
@@ -183,7 +203,9 @@ function generateSingleTrade(idx: number): string {
   const assetClass = pick(ASSET_CLASSES);
   const contractType = errors.has('bad_contract') ? 'BADTYPE' : pick(CONTRACT_TYPES);
   const isOption = contractType === 'OPTN';
-  const upi = errors.has('missing_upi') ? '' : generateUPI();
+  const isFx = assetClass === 'CURR';
+  const isIrsSwap = assetClass === 'INTR' && contractType === 'SWAP';
+  const upi = (errors.has('missing_upi') || isError) ? '' : generateUPI();
   const cfi = generateCFI();
 
   // Dates
@@ -205,7 +227,8 @@ function generateSingleTrade(idx: number): string {
   const ccy1 = errors.has('bad_currency') ? 'ZZZ' : pick(CURRENCIES);
   const ccy2 = pick(CURRENCIES);
   const notional1 = errors.has('bad_notional') ? 'notanumber' : randDecimal(100000, 500000000, 2);
-  const notional2 = rand() > 0.5 ? randDecimal(100000, 500000000, 2) : null;
+  // Leg 2 always for FX, otherwise 50% chance
+  const notional2 = isFx ? randDecimal(100000, 500000000, 2) : (rand() > 0.5 ? randDecimal(100000, 500000000, 2) : null);
 
   // Price
   const price = randDecimal(0.001, 5.0, 6);
@@ -213,12 +236,18 @@ function generateSingleTrade(idx: number): string {
   // Clearing
   const cleared = rand() > 0.3 ? 'Y' : (rand() > 0.5 ? 'N' : 'I');
   const ccpLei = errors.has('missing_ccp') ? '' : LEIS.ASX_CLEAR;
+  // Clearing member LEI when cleared = Y
+  const clrMmbLei = cleared === 'Y' ? LEIS.MQG_SEC : null;
 
   const venue = pick(MIC_CODES);
   const masterAgrmt = pick(MASTER_AGREE);
 
-  // Event type
-  const eventType = action.code === 'NEWT' ? pick(EVENT_TYPES_NEWT) : pick(EVENT_TYPES_OTHER);
+  // Event type — correct per action type
+  const eventTypes = EVENT_TYPES_BY_ACTION[action.code] ?? ['TRAD'];
+  const eventType = pick(eventTypes);
+
+  // Prior UTI for non-NEWT actions
+  const priorUti = isNonNewt ? generateTradeId(rptgLei, idx + 1000) : null;
 
   // Valuation
   const valAmt = randDecimal(-5000000, 5000000, 2);
@@ -238,10 +267,14 @@ function generateSingleTrade(idx: number): string {
   const optnExrcStyle = isOption ? pick(EXERCISE_STYLES) : null;
   const strkPric = isOption ? randDecimal(0.5, 200, 4) : null;
 
-  // Spread (for swaps)
-  const hasSpread = assetClass === 'INTR' && contractType === 'SWAP' && rand() > 0.5;
-  const fxdRate1 = hasSpread ? randDecimal(0.01, 0.08, 6) : null;
+  // Interest Rate (always for IRS, sometimes for other INTR)
+  const hasFixedRate = isIrsSwap || (assetClass === 'INTR' && rand() > 0.5);
+  const hasSpread = isIrsSwap || (assetClass === 'INTR' && rand() > 0.5);
+  const fxdRate1 = hasFixedRate ? randDecimal(0.01, 0.08, 6) : null;
   const sprd2 = hasSpread ? randDecimal(-0.01, 0.05, 6) : null;
+
+  // Exchange Rate (always for FX)
+  const xchgRate = isFx ? randDecimal(0.5, 1.8, 6) : null;
 
   // Beneficiary
   const hasBeneficiary = rand() > 0.6;
@@ -278,6 +311,10 @@ function generateSingleTrade(idx: number): string {
   xml += `            </Lgl></IdTp></OthrCtrPty>\n`;
   // Submitting Agent
   xml += `            <SubmitgAgt><LEI>${rptgLei}</LEI></SubmitgAgt>\n`;
+  // Clearing Member (when cleared = Y)
+  if (clrMmbLei) {
+    xml += `            <ClrMmb><Lgl><Id><LEI>${clrMmbLei}</LEI></Id></Lgl></ClrMmb>\n`;
+  }
   // Beneficiary
   if (bnfcryLei) {
     xml += `            <Bnfcry><Lgl><Id><LEI>${bnfcryLei}</LEI></Id></Lgl></Bnfcry>\n`;
@@ -309,6 +346,10 @@ function generateSingleTrade(idx: number): string {
   xml += `          <TxData>\n`;
   // UTI
   xml += `            <TxId><UnqTxIdr>${uti}</UnqTxIdr></TxId>\n`;
+  // Prior UTI (for non-NEWT actions)
+  if (priorUti) {
+    xml += `            <PrrUnqTxIdr><UnqTxIdr>${priorUti}</UnqTxIdr></PrrUnqTxIdr>\n`;
+  }
   // Dates
   xml += `            <ExctnTmStmp>${execTimestamp}</ExctnTmStmp>\n`;
   if (!isExit) {
@@ -362,6 +403,10 @@ function generateSingleTrade(idx: number): string {
     if (optnTp) xml += `              <Tp>${optnTp}</Tp>\n`;
     if (optnExrcStyle) xml += `              <ExrcStyle>${optnExrcStyle}</ExrcStyle>\n`;
     xml += `            </Optn>\n`;
+  }
+  // Exchange Rate (for FX)
+  if (xchgRate !== null) {
+    xml += `            <XchgRate><Rate>${xchgRate}</Rate></XchgRate>\n`;
   }
   // Package
   if (pkgId) {
