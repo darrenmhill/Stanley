@@ -323,7 +323,7 @@ function parseTradDataElement(tradData: Element, xml: string, doc: Document): Pa
 
   // Exchange Rate
   fields.set('XchgRate',
-    txData ? getTextContent(txData, 'XchgRate', 'Rate') : null);
+    txData ? getTextContent(txData, 'Ccy', 'XchgRate') : null);
 
   // Collateral Data
   const collData = getElement(actionEl, 'CollData');
@@ -468,6 +468,7 @@ export const FIELD_PATHS: Record<string, { base: 'action' | 'counterparty' | 'co
   'OptnExrcStyle': { base: 'transaction', tags: ['Optn', 'ExrcStyle'] },
   'EvtTp': { base: 'transaction', tags: ['DerivEvt', 'Tp'] },
   'EvtTmStmp': { base: 'transaction', tags: ['DerivEvt', 'TmStmp', 'DtTm'] },
+  'XchgRate': { base: 'transaction', tags: ['Ccy', 'XchgRate'] },
   'PckgId': { base: 'transaction', tags: ['Packg', 'CmplxTradId'] },
   'Coll.InitlMrgnPstd': { base: 'action', tags: ['CollData', 'InitlMrgnPstd', 'Amt'] },
   'Coll.VartnMrgnPstd': { base: 'action', tags: ['CollData', 'VartnMrgnPstd', 'Amt'] },

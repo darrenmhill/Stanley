@@ -741,6 +741,86 @@
   background: #edf2f7;
 }
 
+/* ─── Instrument Path Reference Section ──────────────────────────── */
+.btn-paths-ref {
+  background: #319795;
+  color: white;
+}
+.btn-paths-ref:hover {
+  background: #2c7a7b;
+}
+
+.paths-ref-section {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.paths-ref-section h2 {
+  font-size: 1.25rem;
+  color: #1a202c;
+  margin: 0 0 0.25rem;
+}
+
+.paths-ref-subtitle {
+  color: #718096;
+  font-size: 0.82rem;
+  margin: 0 0 1rem;
+}
+
+.paths-ref-group {
+  margin-bottom: 1rem;
+}
+
+.paths-ref-group h3 {
+  font-size: 0.95rem;
+  color: #2d3748;
+  margin: 0.75rem 0 0.4rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.paths-ref-desc {
+  font-weight: 400;
+  color: #718096;
+  font-size: 0.82rem;
+}
+
+.paths-ref-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.paths-ref-table th {
+  background: #edf2f7;
+  color: #4a5568;
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-bottom: 2px solid #cbd5e0;
+}
+
+.paths-ref-table td {
+  padding: 0.35rem 0.6rem;
+  border-bottom: 1px solid #e2e8f0;
+  vertical-align: top;
+}
+
+.paths-ref-table tbody tr:hover {
+  background: #edf2f7;
+}
+
+.paths-ref-path {
+  color: #2b6cb0;
+  word-break: break-all;
+}
+
 /* ─── Footer ─────────────────────────────────────────────────────── */
 .footer {
   text-align: center;
@@ -883,14 +963,43 @@
   }
 
   .aggregate-section,
-  .rules-ref-section {
+  .rules-ref-section,
+  .paths-ref-section {
     background: #1a202c;
     border-color: #4a5568;
   }
 
   .aggregate-header h2,
-  .rules-ref-section h2 {
+  .rules-ref-section h2,
+  .paths-ref-section h2 {
     color: #e2e8f0;
+  }
+
+  .paths-ref-group h3 {
+    color: #e2e8f0;
+    border-bottom-color: #4a5568;
+  }
+
+  .paths-ref-desc {
+    color: #a0aec0;
+  }
+
+  .paths-ref-path {
+    color: #63b3ed;
+  }
+
+  .paths-ref-table th {
+    background: #2d3748;
+    color: #a0aec0;
+    border-bottom-color: #4a5568;
+  }
+
+  .paths-ref-table td {
+    border-bottom-color: #4a5568;
+  }
+
+  .paths-ref-table tbody tr:hover {
+    background: #2d3748;
   }
 
   .agg-card {
