@@ -1559,28 +1559,40 @@ function buildActionEventRules(): RuleFn[] {
     };
   });
 
-  // ASIC-112: Event Type mandatory for NEWT
+  // ASIC-112: Event Type conditional for NEWT (C per Schedule 1 Technical Guidance v1.1)
   rules.push((r) => {
     if (r.actionType !== 'NEWT') {
       return na('ASIC-112', 'EvtTp', 'Action & Event',
-        'Event Type is mandatory for NEWT action type',
+        'Event Type is conditional for NEWT action type per Schedule 1 (C)',
         val(r.fields.get('EvtTp')), 'Applicable only for NEWT');
     }
-    return mandatory('ASIC-112', 'EvtTp', 'Action & Event',
-      'Event Type is mandatory for NEWT action type',
-      r.fields.get('EvtTp'));
+    const v = val(r.fields.get('EvtTp'));
+    return {
+      ruleId: 'ASIC-112', field: 'EvtTp', category: 'Action & Event' as RuleCategory,
+      description: 'Event Type is conditional for NEWT action type per Schedule 1 (C)',
+      severity: 'WARNING' as Severity,
+      status: v ? 'PASS' : 'FAIL',
+      actual: v,
+      expected: 'Event Type recommended for NEWT (e.g., TRAD, NOVA, COMP)',
+    };
   });
 
-  // ASIC-113: Event Type mandatory for TERM
+  // ASIC-113: Event Type conditional for TERM (C per Schedule 1 Technical Guidance v1.1)
   rules.push((r) => {
     if (r.actionType !== 'TERM') {
       return na('ASIC-113', 'EvtTp', 'Action & Event',
-        'Event Type is mandatory for TERM action type',
+        'Event Type is conditional for TERM action type per Schedule 1 (C)',
         val(r.fields.get('EvtTp')), 'Applicable only for TERM');
     }
-    return mandatory('ASIC-113', 'EvtTp', 'Action & Event',
-      'Event Type is mandatory for TERM action type',
-      r.fields.get('EvtTp'));
+    const v = val(r.fields.get('EvtTp'));
+    return {
+      ruleId: 'ASIC-113', field: 'EvtTp', category: 'Action & Event' as RuleCategory,
+      description: 'Event Type is conditional for TERM action type per Schedule 1 (C)',
+      severity: 'WARNING' as Severity,
+      status: v ? 'PASS' : 'FAIL',
+      actual: v,
+      expected: 'Event Type recommended for TERM (e.g., ETRM, EXER, COMP)',
+    };
   });
 
   // ASIC-114: Event Timestamp mandatory when Event Type provided
