@@ -818,6 +818,208 @@ function buildRules(): RuleFn[] {
     };
   });
 
+  // ═══════════════════════════════════════════════════════════════════
+  // ADDITIONAL RULES (Gap analysis — ASIC Schedule 1 coverage)
+  // ═══════════════════════════════════════════════════════════════════
+
+  // Rule 51: Prior UTI format (if provided)
+  rules.push((r) => {
+    const v = val(r.fields.get('PrrUTI'));
+    if (!v) {
+      return { ruleId: 'ASIC-051', field: 'PrrUTI', category: 'Identifier',
+        description: 'Prior UTI must conform to UTI format if provided (LEI prefix + suffix)',
+        severity: 'WARNING', status: 'N/A', actual: null, expected: 'UTI format if provided' };
+    }
+    return {
+      ruleId: 'ASIC-051', field: 'PrrUTI', category: 'Identifier',
+      description: 'Prior UTI must conform to UTI format if provided (LEI prefix + suffix)',
+      severity: 'ERROR',
+      status: UTI_REGEX.test(v) ? 'PASS' : 'FAIL',
+      actual: v,
+      expected: 'LEI prefix (20 chars) + trade suffix (1-32 alphanum)',
+    };
+  });
+
+  // Rule 52: Execution Venue — MIC code format (ISO 10383)
+  const MIC_REGEX = /^[A-Z0-9]{4}$/;
+  rules.push((r) =>
+    formatCheck('ASIC-052', 'ExctnVn', 'Clearing & Trading',
+      'Execution Venue must be a valid MIC code (ISO 10383) if reported',
+      r.fields.get('ExctnVn'), MIC_REGEX,
+      'ISO 10383: 4-character MIC code (e.g., XASX)'));
+
+  // Rule 53: Master Agreement Type — allowable values
+  rules.push((r) =>
+    allowedValues('ASIC-053', 'MstrAgrmt.Tp', 'Clearing & Trading',
+      'Master Agreement Type must be a recognised agreement type if reported',
+      r.fields.get('MstrAgrmt.Tp'),
+      ['ISDA', 'CMOF', 'DERV', 'CNMA', 'GMRA', 'GMSLA', 'OTHR']));
+
+  // Rule 54: Notional Amount required when Currency is reported
+  rules.push((r) => {
+    const amt = val(r.fields.get('NtnlAmt1'));
+    const ccy = val(r.fields.get('NtnlCcy1'));
+    if (!ccy) {
+      return { ruleId: 'ASIC-054', field: 'NtnlAmt1 vs NtnlCcy1', category: 'Notional & Quantity',
+        description: 'Notional Amount and Currency must be reported together',
+        severity: 'WARNING', status: 'N/A', actual: null, expected: 'Both or neither' };
+    }
+    return {
+      ruleId: 'ASIC-054', field: 'NtnlAmt1 vs NtnlCcy1', category: 'Notional & Quantity',
+      description: 'Notional Amount and Currency must be reported together',
+      severity: 'ERROR',
+      status: amt ? 'PASS' : 'FAIL',
+      actual: `Amount: ${amt}, Currency: ${ccy}`,
+      expected: 'Both notional amount and currency must be present',
+    };
+  });
+
+  // Rule 55: Strike Price Currency — ISO 4217
+  rules.push((r) =>
+    formatCheck('ASIC-055', 'StrkPricCcy', 'Price',
+      'Strike Price Currency must be a valid ISO 4217 currency code if reported',
+      r.fields.get('StrkPricCcy'), ISO_CURRENCY_REGEX,
+      'ISO 4217: 3-letter currency code'));
+
+  // Rule 56: Product Classification (CFI) — 6-character format
+  const CFI_REGEX = /^[A-Z]{6}$/;
+  rules.push((r) =>
+    formatCheck('ASIC-056', 'PdctClssfctn', 'Product',
+      'Product Classification (CFI code) must be 6 alphabetic characters if reported',
+      r.fields.get('PdctClssfctn'), CFI_REGEX,
+      'ISO 10962: 6 uppercase letters (e.g., SRACSP)'));
+
+  // Rule 57: Beneficiary LEI — ISO 17442 format
+  rules.push((r) =>
+    formatCheck('ASIC-057', 'Bnfcry.LEI', 'Counterparty',
+      'Beneficiary LEI must conform to ISO 17442 format if reported',
+      r.fields.get('Bnfcry.LEI'), LEI_REGEX,
+      'ISO 17442: 18 alphanumeric + 2 check digits'));
+
+  // Rule 58: Counterparty 2 Direction — allowable values
+  rules.push((r) =>
+    allowedValues('ASIC-058', 'CtrPty2.Drctn', 'Counterparty',
+      'Direction of Counterparty 2 must be BYER or SLLR if reported',
+      r.fields.get('CtrPty2.Drctn'),
+      ['BYER', 'SLLR']));
+
+  // Rule 59: Delivery Type — allowable values
+  rules.push((r) =>
+    allowedValues('ASIC-059', 'DlvryTp', 'Clearing & Trading',
+      'Delivery Type must be CASH, PHYS, or OPTL if reported',
+      r.fields.get('DlvryTp'),
+      ['CASH', 'PHYS', 'OPTL']));
+
+  // Rule 60: Initial Margin Received — numeric check
+  rules.push((r) => {
+    const v = val(r.fields.get('Coll.InitlMrgnRcvd'));
+    if (!v) {
+      return { ruleId: 'ASIC-060', field: 'Coll.InitlMrgnRcvd', category: 'Collateral',
+        description: 'Initial Margin Received must be a valid decimal number if reported',
+        severity: 'WARNING', status: 'N/A', actual: null, expected: 'Decimal number' };
+    }
+    return {
+      ruleId: 'ASIC-060', field: 'Coll.InitlMrgnRcvd', category: 'Collateral',
+      description: 'Initial Margin Received must be a valid decimal number if reported',
+      severity: 'ERROR',
+      status: !isNaN(parseFloat(v)) ? 'PASS' : 'FAIL',
+      actual: v, expected: 'Valid decimal number',
+    };
+  });
+
+  // Rule 61: Variation Margin Received — numeric check
+  rules.push((r) => {
+    const v = val(r.fields.get('Coll.VartnMrgnRcvd'));
+    if (!v) {
+      return { ruleId: 'ASIC-061', field: 'Coll.VartnMrgnRcvd', category: 'Collateral',
+        description: 'Variation Margin Received must be a valid decimal number if reported',
+        severity: 'WARNING', status: 'N/A', actual: null, expected: 'Decimal number' };
+    }
+    return {
+      ruleId: 'ASIC-061', field: 'Coll.VartnMrgnRcvd', category: 'Collateral',
+      description: 'Variation Margin Received must be a valid decimal number if reported',
+      severity: 'ERROR',
+      status: !isNaN(parseFloat(v)) ? 'PASS' : 'FAIL',
+      actual: v, expected: 'Valid decimal number',
+    };
+  });
+
+  // Rule 62: Valuation Method — allowable values
+  rules.push((r) =>
+    allowedValues('ASIC-062', 'Valtn.Mthd', 'Valuation',
+      'Valuation Method must be MTOM (mark-to-market), MTMD (mark-to-model), or CCPV (CCP valuation) if reported',
+      r.fields.get('Valtn.Mthd'),
+      ['MTOM', 'MTMD', 'CCPV']));
+
+  // Rule 63: Package Identifier — non-empty if element present
+  rules.push((r) => {
+    const v = r.fields.get('PckgId');
+    if (v === null || v === undefined) {
+      return { ruleId: 'ASIC-063', field: 'PckgId', category: 'Action & Event',
+        description: 'Package Identifier must be non-empty if the element is present',
+        severity: 'WARNING', status: 'N/A', actual: null, expected: 'Non-empty if present' };
+    }
+    return {
+      ruleId: 'ASIC-063', field: 'PckgId', category: 'Action & Event',
+      description: 'Package Identifier must be non-empty if the element is present',
+      severity: 'ERROR',
+      status: v.trim() !== '' ? 'PASS' : 'FAIL',
+      actual: v || null, expected: 'Non-empty string',
+    };
+  });
+
+  // Rule 64: Option Exercise Style mandatory when Contract Type is OPTN
+  rules.push((r) => {
+    const ct = val(r.fields.get('CtrctTp'));
+    const es = val(r.fields.get('OptnExrcStyle'));
+    if (ct !== 'OPTN') {
+      return { ruleId: 'ASIC-064', field: 'OptnExrcStyle', category: 'Price',
+        description: 'Option Exercise Style is mandatory when Contract Type is OPTN',
+        severity: 'WARNING', status: 'N/A', actual: es, expected: 'Applicable only when CtrctTp = OPTN' };
+    }
+    return {
+      ruleId: 'ASIC-064', field: 'OptnExrcStyle', category: 'Price',
+      description: 'Option Exercise Style is mandatory when Contract Type is OPTN',
+      severity: 'ERROR',
+      status: es ? 'PASS' : 'FAIL',
+      actual: es, expected: 'AMER, EURO, BERM, or ASIA',
+    };
+  });
+
+  // Rule 65: Spread Leg 1 — numeric check
+  rules.push((r) => {
+    const v = val(r.fields.get('Sprd1'));
+    if (!v) {
+      return { ruleId: 'ASIC-065', field: 'Sprd1', category: 'Price',
+        description: 'Spread (Leg 1) must be a valid decimal number if reported',
+        severity: 'WARNING', status: 'N/A', actual: null, expected: 'Decimal number' };
+    }
+    return {
+      ruleId: 'ASIC-065', field: 'Sprd1', category: 'Price',
+      description: 'Spread (Leg 1) must be a valid decimal number if reported',
+      severity: 'ERROR',
+      status: !isNaN(parseFloat(v)) ? 'PASS' : 'FAIL',
+      actual: v, expected: 'Valid decimal number',
+    };
+  });
+
+  // Rule 66: Spread Leg 2 — numeric check
+  rules.push((r) => {
+    const v = val(r.fields.get('Sprd2'));
+    if (!v) {
+      return { ruleId: 'ASIC-066', field: 'Sprd2', category: 'Price',
+        description: 'Spread (Leg 2) must be a valid decimal number if reported',
+        severity: 'WARNING', status: 'N/A', actual: null, expected: 'Decimal number' };
+    }
+    return {
+      ruleId: 'ASIC-066', field: 'Sprd2', category: 'Price',
+      description: 'Spread (Leg 2) must be a valid decimal number if reported',
+      severity: 'ERROR',
+      status: !isNaN(parseFloat(v)) ? 'PASS' : 'FAIL',
+      actual: v, expected: 'Valid decimal number',
+    };
+  });
+
   return rules;
 }
 
