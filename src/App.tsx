@@ -1,37 +1,88 @@
 import { useState, useCallback } from 'react';
-import { parseDerivativesTradeReport, updateFieldInXml, FIELD_PATHS } from './engine/xmlParser';
+import { parseAllTradeReports, updateFieldInXml, FIELD_PATHS, type ParsedReport } from './engine/xmlParser';
 import { validateReport, type ValidationResult } from './engine/validationRules';
 import { SAMPLE_XML } from './engine/sampleXml';
 import './App.css';
 
+interface TradeEntry {
+  index: number;
+  report: ParsedReport;
+  validation: ValidationResult[];
+  failCount: number;
+}
+
 type FilterStatus = 'ALL' | 'PASS' | 'FAIL' | 'N/A';
+
+// Grid columns shown in the trades list
+const GRID_FIELDS = [
+  { key: 'UTI', label: 'UTI', truncate: 24 },
+  { key: 'AsstClss', label: 'Asset' },
+  { key: 'CtrctTp', label: 'Contract' },
+  { key: 'CtrPty1.Drctn', label: 'Dir' },
+  { key: 'NtnlAmt1', label: 'Notional', numeric: true },
+  { key: 'NtnlCcy1', label: 'Ccy' },
+  { key: 'FctvDt', label: 'Eff. Date' },
+  { key: 'MtrtyDt', label: 'Mat. Date' },
+] as const;
+
+function formatNotional(v: string | null | undefined): string {
+  if (!v) return '';
+  const n = parseFloat(v);
+  if (isNaN(n)) return v;
+  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `${(n / 1e3).toFixed(0)}K`;
+  return n.toFixed(2);
+}
 
 function App() {
   const [xml, setXml] = useState('');
-  const [results, setResults] = useState<ValidationResult[] | null>(null);
+  const [trades, setTrades] = useState<TradeEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedTradeIdx, setSelectedTradeIdx] = useState<number | null>(null);
   const [filter, setFilter] = useState<FilterStatus>('ALL');
-  const [actionType, setActionType] = useState<string | null>(null);
+  const [showXml, setShowXml] = useState(false);
+  const [validationKey, setValidationKey] = useState(0);
+
+  // Grid inline editing state
+  const [gridEditCell, setGridEditCell] = useState<{ row: number; field: string } | null>(null);
+  const [gridEditValue, setGridEditValue] = useState('');
+
+  // Validation detail inline editing state
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
 
   const runValidation = useCallback((input: string) => {
     setError(null);
-    setResults(null);
-    setActionType(null);
+    setTrades(null);
+    setSelectedTradeIdx(null);
     setEditingRuleId(null);
+    setGridEditCell(null);
+    setFilter('ALL');
+
     if (!input.trim()) {
       setError('Please paste an XML message or load the sample.');
       return;
     }
-    try {
-      const report = parseDerivativesTradeReport(input);
-      setActionType(report.actionType);
-      const validationResults = validateReport(report);
-      setResults(validationResults);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
+
+    // Use requestAnimationFrame to ensure the UI shows a brief "Validating..." state
+    setValidationKey((k) => k + 1);
+    requestAnimationFrame(() => {
+      try {
+        const parsed = parseAllTradeReports(input);
+        const entries: TradeEntry[] = parsed.map(({ index, report }) => {
+          const validation = validateReport(report);
+          const failCount = validation.filter((v) => v.status === 'FAIL').length;
+          return { index, report, validation, failCount };
+        });
+        setTrades(entries);
+        // Auto-select first trade with errors, or first trade
+        const firstError = entries.find((t) => t.failCount > 0);
+        setSelectedTradeIdx(firstError ? firstError.index : 0);
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    });
   }, []);
 
   const handleLoadSample = () => {
@@ -55,6 +106,38 @@ function App() {
     reader.readAsText(file);
   };
 
+  const handleExport = () => {
+    if (!xml) return;
+    const blob = new Blob([xml], { type: 'application/xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'asic-trades-export.xml';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // ─── Grid cell editing ──────────────────────────────────
+  const isGridCellEditable = (field: string) => !!FIELD_PATHS[field];
+
+  const startGridEdit = (row: number, field: string, currentValue: string | null) => {
+    setGridEditCell({ row, field });
+    setGridEditValue(currentValue ?? '');
+  };
+
+  const saveGridEdit = () => {
+    if (!gridEditCell) return;
+    const newXml = updateFieldInXml(xml, gridEditCell.field, gridEditValue, gridEditCell.row);
+    setXml(newXml);
+    setGridEditCell(null);
+    runValidation(newXml);
+  };
+
+  const cancelGridEdit = () => {
+    setGridEditCell(null);
+  };
+
+  // ─── Validation detail editing ──────────────────────────
   const isEditable = (r: ValidationResult) =>
     r.status === 'FAIL' && !!FIELD_PATHS[r.field];
 
@@ -64,24 +147,38 @@ function App() {
   };
 
   const handleSaveEdit = (fieldName: string) => {
-    const newXml = updateFieldInXml(xml, fieldName, editValue);
+    if (selectedTradeIdx === null) return;
+    const newXml = updateFieldInXml(xml, fieldName, editValue, selectedTradeIdx);
     setXml(newXml);
     setEditingRuleId(null);
     runValidation(newXml);
   };
 
-  const filtered = results
-    ? filter === 'ALL'
-      ? results
-      : results.filter((r) => r.status === filter)
+  // ─── Derived data ──────────────────────────────────────
+  const selectedTrade = trades && selectedTradeIdx !== null
+    ? trades.find((t) => t.index === selectedTradeIdx) ?? null
     : null;
 
-  const counts = results
+  const filteredResults = selectedTrade
+    ? filter === 'ALL'
+      ? selectedTrade.validation
+      : selectedTrade.validation.filter((r) => r.status === filter)
+    : null;
+
+  const counts = selectedTrade
     ? {
-        total: results.length,
-        pass: results.filter((r) => r.status === 'PASS').length,
-        fail: results.filter((r) => r.status === 'FAIL').length,
-        na: results.filter((r) => r.status === 'N/A').length,
+        total: selectedTrade.validation.length,
+        pass: selectedTrade.validation.filter((r) => r.status === 'PASS').length,
+        fail: selectedTrade.validation.filter((r) => r.status === 'FAIL').length,
+        na: selectedTrade.validation.filter((r) => r.status === 'N/A').length,
+      }
+    : null;
+
+  const tradeSummary = trades
+    ? {
+        total: trades.length,
+        valid: trades.filter((t) => t.failCount === 0).length,
+        withErrors: trades.filter((t) => t.failCount > 0).length,
       }
     : null;
 
@@ -103,17 +200,27 @@ function App() {
             Upload XML File
             <input type="file" accept=".xml,.txt" onChange={handleFileUpload} hidden />
           </label>
-          <button className="btn btn-validate" onClick={handleValidate} disabled={!xml.trim()}>
+          <button className="btn btn-validate" onClick={handleValidate} disabled={!xml.trim()} key={validationKey}>
             Validate
           </button>
+          {trades && (
+            <button className="btn btn-export" onClick={handleExport}>
+              Export XML
+            </button>
+          )}
+          <button className="btn btn-toggle-xml" onClick={() => setShowXml(!showXml)}>
+            {showXml ? 'Hide XML' : 'Show XML'}
+          </button>
         </div>
-        <textarea
-          className="xml-input"
-          value={xml}
-          onChange={(e) => setXml(e.target.value)}
-          placeholder="Paste your ISO 20022 auth.030 XML message here..."
-          spellCheck={false}
-        />
+        {showXml && (
+          <textarea
+            className="xml-input"
+            value={xml}
+            onChange={(e) => setXml(e.target.value)}
+            placeholder="Paste your ISO 20022 auth.030 XML message here..."
+            spellCheck={false}
+          />
+        )}
       </section>
 
       {error && (
@@ -122,11 +229,114 @@ function App() {
         </div>
       )}
 
-      {results && counts && (
+      {/* ─── Trades Grid ────────────────────────────────────── */}
+      {trades && tradeSummary && (
+        <section className="trades-section">
+          <div className="trades-header">
+            <h2>Trades</h2>
+            <span className="trades-stats">
+              {tradeSummary.total} trades: <span className="stat-valid">{tradeSummary.valid} valid</span>,{' '}
+              <span className="stat-errors">{tradeSummary.withErrors} with errors</span>
+            </span>
+          </div>
+          <div className="trades-grid-wrapper">
+            <table className="trades-grid">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                  {GRID_FIELDS.map((f) => (
+                    <th key={f.key}>{f.label}</th>
+                  ))}
+                  <th>Errors</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trades.map((trade) => (
+                  <tr
+                    key={trade.index}
+                    className={[
+                      trade.failCount > 0 ? 'trade-row-error' : 'trade-row-valid',
+                      selectedTradeIdx === trade.index ? 'trade-row-selected' : '',
+                    ].join(' ')}
+                    onClick={() => {
+                      setSelectedTradeIdx(trade.index);
+                      setFilter('ALL');
+                      setEditingRuleId(null);
+                    }}
+                  >
+                    <td className="mono">{trade.index + 1}</td>
+                    <td>
+                      <span className={`badge-sm ${trade.failCount > 0 ? 'badge-sm-fail' : 'badge-sm-pass'}`}>
+                        {trade.failCount > 0 ? 'FAIL' : 'PASS'}
+                      </span>
+                    </td>
+                    <td className="mono">{trade.report.actionType ?? '—'}</td>
+                    {GRID_FIELDS.map((f) => {
+                      const val = trade.report.fields.get(f.key) ?? '';
+                      const isEditing = gridEditCell?.row === trade.index && gridEditCell?.field === f.key;
+                      const editable = isGridCellEditable(f.key);
+
+                      if (isEditing) {
+                        return (
+                          <td key={f.key} className="grid-edit-td">
+                            <input
+                              className="grid-edit-input"
+                              value={gridEditValue}
+                              onChange={(e) => setGridEditValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') saveGridEdit();
+                                if (e.key === 'Escape') cancelGridEdit();
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              autoFocus
+                            />
+                          </td>
+                        );
+                      }
+
+                      const displayVal = 'numeric' in f && f.numeric
+                        ? formatNotional(val)
+                        : 'truncate' in f && f.truncate && val.length > f.truncate
+                          ? val.substring(0, f.truncate) + '...'
+                          : val || '—';
+
+                      return (
+                        <td
+                          key={f.key}
+                          className={`mono ${editable ? 'grid-cell-editable' : ''}`}
+                          onDoubleClick={(e) => {
+                            if (editable) {
+                              e.stopPropagation();
+                              startGridEdit(trade.index, f.key, val);
+                            }
+                          }}
+                          title={editable ? 'Double-click to edit' : val}
+                        >
+                          {displayVal}
+                        </td>
+                      );
+                    })}
+                    <td className={`mono ${trade.failCount > 0 ? 'error-count' : ''}`}>
+                      {trade.failCount}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* ─── Validation Detail ──────────────────────────────── */}
+      {selectedTrade && counts && (
         <section className="results-section">
           <div className="results-header">
-            <h2>Validation Results</h2>
-            {actionType && <span className="action-badge">Action: {actionType}</span>}
+            <h2>Validation: Trade #{selectedTrade.index + 1}</h2>
+            {selectedTrade.report.actionType && (
+              <span className="action-badge">Action: {selectedTrade.report.actionType}</span>
+            )}
           </div>
 
           <div className="summary-cards">
@@ -174,8 +384,8 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {filtered && filtered.length > 0 ? (
-                  filtered.map((r, i) => (
+                {filteredResults && filteredResults.length > 0 ? (
+                  filteredResults.map((r, i) => (
                     <tr key={i} className={`row-${r.status.toLowerCase().replace('/', '')}`}>
                       <td>
                         <span className={`badge badge-${r.status.toLowerCase().replace('/', '')}`}>

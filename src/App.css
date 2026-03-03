@@ -79,6 +79,22 @@
   cursor: not-allowed;
 }
 
+.btn-export {
+  background: #ed8936;
+  color: white;
+}
+.btn-export:hover {
+  background: #dd6b20;
+}
+
+.btn-toggle-xml {
+  background: #a0aec0;
+  color: white;
+}
+.btn-toggle-xml:hover {
+  background: #718096;
+}
+
 .xml-input {
   width: 100%;
   min-height: 180px;
@@ -109,6 +125,165 @@
   border-radius: 6px;
   margin-bottom: 1.5rem;
   font-size: 0.875rem;
+}
+
+/* ─── Trades Section ─────────────────────────────────────────────── */
+.trades-section {
+  margin-bottom: 1.5rem;
+}
+
+.trades-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.trades-header h2 {
+  font-size: 1.25rem;
+  color: #1a202c;
+  margin: 0;
+}
+
+.trades-stats {
+  font-size: 0.85rem;
+  color: #718096;
+}
+
+.stat-valid {
+  color: #38a169;
+  font-weight: 600;
+}
+
+.stat-errors {
+  color: #e53e3e;
+  font-weight: 600;
+}
+
+.trades-grid-wrapper {
+  overflow: auto;
+  max-height: 400px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.trades-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.trades-grid thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.trades-grid th {
+  background: #2d3748;
+  color: white;
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.trades-grid td {
+  padding: 0.35rem 0.6rem;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trades-grid tbody tr {
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.trades-grid tbody tr:hover {
+  background: #edf2f7;
+}
+
+.trade-row-valid {
+  background: white;
+}
+
+.trade-row-error {
+  background: #fff5f5;
+}
+
+.trade-row-selected {
+  background: #ebf8ff !important;
+  outline: 2px solid #4299e1;
+  outline-offset: -2px;
+}
+
+.trade-row-error.trade-row-selected {
+  background: #fff0f0 !important;
+  outline-color: #e53e3e;
+}
+
+.error-count {
+  color: #e53e3e;
+  font-weight: 700;
+}
+
+/* Small badges for grid */
+.badge-sm {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  border-radius: 9999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.badge-sm-pass {
+  background: #c6f6d5;
+  color: #22543d;
+}
+
+.badge-sm-fail {
+  background: #fed7d7;
+  color: #c53030;
+}
+
+/* Grid cell editing */
+.grid-cell-editable {
+  cursor: pointer;
+  border-bottom: 1px dotted #a0aec0;
+}
+
+.grid-cell-editable:hover {
+  background: #fefcbf;
+}
+
+.grid-edit-td {
+  padding: 0.15rem 0.3rem !important;
+}
+
+.grid-edit-input {
+  width: 100%;
+  min-width: 80px;
+  padding: 0.2rem 0.3rem;
+  border: 2px solid #4299e1;
+  border-radius: 3px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.75rem;
+  background: white;
+  color: #2d3748;
+  box-sizing: border-box;
+}
+
+.grid-edit-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.3);
 }
 
 /* ─── Results Section ────────────────────────────────────────────── */
@@ -398,12 +573,17 @@
   .expected-cell {
     max-width: 200px;
   }
+
+  .trades-grid-wrapper {
+    max-height: 300px;
+  }
 }
 
 /* ─── Light/Dark Overrides ───────────────────────────────────────── */
 @media (prefers-color-scheme: dark) {
   .header h1,
-  .results-header h2 {
+  .results-header h2,
+  .trades-header h2 {
     color: #e2e8f0;
   }
 
@@ -418,16 +598,48 @@
     box-shadow: 0 0 0 3px rgba(99, 179, 237, 0.2);
   }
 
-  .table-wrapper {
+  .table-wrapper,
+  .trades-grid-wrapper {
     border-color: #4a5568;
   }
 
-  .results-table td {
+  .results-table td,
+  .trades-grid td {
     border-bottom-color: #4a5568;
   }
 
   .results-table tbody tr:hover {
     background: #2d3748;
+  }
+
+  .trades-grid tbody tr:hover {
+    background: #2d3748;
+  }
+
+  .trade-row-valid {
+    background: #1a202c;
+  }
+
+  .trade-row-error {
+    background: rgba(254, 178, 178, 0.06);
+  }
+
+  .trade-row-selected {
+    background: rgba(66, 153, 225, 0.12) !important;
+  }
+
+  .trade-row-error.trade-row-selected {
+    background: rgba(229, 62, 62, 0.12) !important;
+  }
+
+  .grid-cell-editable:hover {
+    background: rgba(254, 252, 191, 0.1);
+  }
+
+  .grid-edit-input {
+    background: #2d3748;
+    color: #e2e8f0;
+    border-color: #63b3ed;
   }
 
   .row-fail {
@@ -464,5 +676,9 @@
   }
   .btn-cancel:hover {
     background: #718096;
+  }
+
+  .trades-stats {
+    color: #a0aec0;
   }
 }
