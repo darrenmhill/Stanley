@@ -446,7 +446,20 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {trades.map((trade) => (
+                {trades.map((trade) => {
+                  // Collect grid field keys that have at least one FAIL rule
+                  const failedGridKeys = new Set<string>();
+                  for (const r of trade.validation) {
+                    if (r.status === 'FAIL') {
+                      for (const gf of GRID_FIELDS) {
+                        if (r.field === gf.key || r.field.startsWith(gf.key + ' ') || r.field.includes(' ' + gf.key)) {
+                          failedGridKeys.add(gf.key);
+                        }
+                      }
+                    }
+                  }
+
+                  return (
                   <tr
                     key={trade.index}
                     className={[
@@ -469,6 +482,7 @@ function App() {
                       const val = trade.report.fields.get(f.key) ?? '';
                       const isEditing = gridEditCell?.row === trade.index && gridEditCell?.field === f.key;
                       const editable = isGridCellEditable(f.key);
+                      const hasError = failedGridKeys.has(f.key);
 
                       if (isEditing) {
                         return (
@@ -497,7 +511,7 @@ function App() {
                       return (
                         <td
                           key={f.key}
-                          className={`mono ${editable ? 'grid-cell-editable' : ''}`}
+                          className={`mono ${editable ? 'grid-cell-editable' : ''}${hasError ? ' grid-cell-error' : ''}`}
                           onDoubleClick={(e) => {
                             if (editable) {
                               e.stopPropagation();
@@ -514,7 +528,8 @@ function App() {
                       {trade.failCount}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

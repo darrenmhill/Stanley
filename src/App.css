@@ -233,6 +233,14 @@
   font-weight: 700;
 }
 
+/* Highlight specific grid cells that have validation errors */
+.grid-cell-error {
+  background: rgba(229, 62, 62, 0.12);
+  color: #c53030;
+  font-weight: 600;
+  border-bottom: 2px solid #e53e3e;
+}
+
 /* Small badges for grid */
 .badge-sm {
   display: inline-block;
@@ -821,6 +829,11 @@
 
   .grid-cell-editable:hover {
     background: rgba(254, 252, 191, 0.1);
+  }
+
+  .grid-cell-error {
+    background: rgba(229, 62, 62, 0.18);
+    color: #feb2b2;
   }
 
   .grid-edit-input {
