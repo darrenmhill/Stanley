@@ -1,6 +1,13 @@
 /**
  * Sample XML generator for ASIC Derivative Reporting Validator.
  * Generates 100+ trades with real GLEIF LEIs and ~25% deliberate errors.
+ *
+ * Structure per ASIC ISO 20022 Mapping Document v1.1 (Feb 2025):
+ *   DerivsTradRpt > TradData > Rpt > {Action} > {
+ *     RptgTmStmp,
+ *     CptrPtySpcfcData > CtrPty > { ... },
+ *     CmonTradData > { CtrctData > { ... }, TxData > { ... } }
+ *   }
  */
 
 // ─── Real GLEIF LEIs (verified Australian financial institutions) ────
@@ -71,60 +78,48 @@ function pickWeighted(): (typeof ACTION_CONFIGS)[number] {
   return ACTION_CONFIGS[0];
 }
 
-const ASSET_CLASSES = ['INTR', 'CRDT', 'EQUI', 'COMM', 'FREX'] as const;
+const ASSET_CLASSES = ['INTR', 'CRDT', 'EQUI', 'COMM', 'CURR'] as const;
 const CONTRACT_TYPES = ['SWAP', 'OPTN', 'FUTR', 'FORW', 'FRAS', 'CFDS'] as const;
 const CURRENCIES = ['AUD', 'USD', 'EUR', 'GBP', 'JPY', 'SGD', 'HKD'] as const;
 const DIRECTIONS = ['BYER', 'SLLR'] as const;
 const EVENT_TYPES_NEWT = ['TRAD', 'NOVA', 'COMP', 'CLRG', 'ALOC', 'INCP'] as const;
 const EVENT_TYPES_OTHER = ['TRAD', 'NOVA', 'COMP', 'ETRM', 'EXER', 'UPDT', 'CORP'] as const;
-const MASTER_AGREE = ['ISDA', 'CMOF', 'DERV', 'OTHR'] as const;
+const MASTER_AGREE = ['ISDA', 'CMAM', 'DERV', 'OTHR'] as const;
 const EXERCISE_STYLES = ['AMER', 'EURO', 'BERM'] as const;
-const DELIVERY_TYPES = ['CASH', 'PHYS', 'OPTL'] as const;
 const MIC_CODES = ['XASX', 'XSFE', 'XCHI', 'XXXX'] as const;
 const COUNTRIES = ['AU', 'US', 'GB', 'JP', 'SG', 'HK', 'NZ', 'DE'] as const;
 
 // ─── Error injection schedule ───────────────────────────────────────
-// Trade indices that will have specific errors injected
 interface ErrorSpec {
   tradeIdx: number;
   type: string;
 }
 
 const ERROR_SCHEDULE: ErrorSpec[] = [
-  // Invalid LEI format (4 trades)
   { tradeIdx: 3, type: 'bad_lei' },
   { tradeIdx: 17, type: 'bad_lei' },
   { tradeIdx: 41, type: 'bad_lei' },
   { tradeIdx: 78, type: 'bad_lei' },
-  // Maturity before effective (4 trades)
   { tradeIdx: 7, type: 'mat_before_eff' },
   { tradeIdx: 29, type: 'mat_before_eff' },
   { tradeIdx: 55, type: 'mat_before_eff' },
   { tradeIdx: 88, type: 'mat_before_eff' },
-  // Non-numeric notional (3 trades)
   { tradeIdx: 11, type: 'bad_notional' },
   { tradeIdx: 45, type: 'bad_notional' },
   { tradeIdx: 72, type: 'bad_notional' },
-  // Delta out of range (3 trades)
   { tradeIdx: 15, type: 'bad_delta' },
   { tradeIdx: 52, type: 'bad_delta' },
   { tradeIdx: 91, type: 'bad_delta' },
-  // Missing CCP LEI when Clrd=Y (3 trades)
   { tradeIdx: 20, type: 'missing_ccp' },
   { tradeIdx: 60, type: 'missing_ccp' },
   { tradeIdx: 85, type: 'missing_ccp' },
-  // Invalid UTI format (2 trades)
   { tradeIdx: 25, type: 'bad_uti' },
   { tradeIdx: 68, type: 'bad_uti' },
-  // Invalid currency code (2 trades)
   { tradeIdx: 33, type: 'bad_currency' },
   { tradeIdx: 76, type: 'bad_currency' },
-  // Invalid country code (2 trades)
   { tradeIdx: 37, type: 'bad_country' },
   { tradeIdx: 82, type: 'bad_country' },
-  // Missing mandatory UPI on NEWT (1 trade)
   { tradeIdx: 48, type: 'missing_upi' },
-  // Invalid contract type (1 trade)
   { tradeIdx: 95, type: 'bad_contract' },
 ];
 
@@ -179,20 +174,15 @@ function generateSingleTrade(idx: number): string {
   let othrLei = pick(LEI_POOL);
   while (othrLei === rptgLei) othrLei = pick(LEI_POOL);
 
-  // Apply errors
   const displayOthrLei = errors.has('bad_lei') ? 'INVALIDLEI12345' : othrLei;
   const othrCtry = errors.has('bad_country') ? '1A' : pick(COUNTRIES);
   const direction1 = pick(DIRECTIONS);
   const direction2 = direction1 === 'BYER' ? 'SLLR' : 'BYER';
 
-  const uti = errors.has('bad_uti')
-    ? 'SHORTUTI'
-    : generateTradeId(rptgLei, idx);
-
+  const uti = errors.has('bad_uti') ? 'SHORTUTI' : generateTradeId(rptgLei, idx);
   const assetClass = pick(ASSET_CLASSES);
   const contractType = errors.has('bad_contract') ? 'BADTYPE' : pick(CONTRACT_TYPES);
   const isOption = contractType === 'OPTN';
-
   const upi = errors.has('missing_upi') ? '' : generateUPI();
   const cfi = generateCFI();
 
@@ -205,12 +195,9 @@ function generateSingleTrade(idx: number): string {
 
   let mtrtyDate: string;
   if (errors.has('mat_before_eff')) {
-    // Maturity BEFORE effective
-    const badYear = effYear - 1;
-    mtrtyDate = generateDate(badYear, 1, 12);
+    mtrtyDate = generateDate(effYear - 1, 1, 12);
   } else {
-    const matYear = effYear + randInt(1, 6);
-    mtrtyDate = generateDate(matYear, 1, 12);
+    mtrtyDate = generateDate(effYear + randInt(1, 6), 1, 12);
   }
   const xpryDate = mtrtyDate;
 
@@ -222,30 +209,23 @@ function generateSingleTrade(idx: number): string {
 
   // Price
   const price = randDecimal(0.001, 5.0, 6);
-  const priceCcy = pick(CURRENCIES);
 
   // Clearing
   const cleared = rand() > 0.3 ? 'Y' : (rand() > 0.5 ? 'N' : 'I');
   const ccpLei = errors.has('missing_ccp') ? '' : LEIS.ASX_CLEAR;
 
-  // Execution venue
   const venue = pick(MIC_CODES);
   const masterAgrmt = pick(MASTER_AGREE);
-  const deliveryType = pick(DELIVERY_TYPES);
 
   // Event type
-  const eventType = action.code === 'NEWT'
-    ? pick(EVENT_TYPES_NEWT)
-    : pick(EVENT_TYPES_OTHER);
+  const eventType = action.code === 'NEWT' ? pick(EVENT_TYPES_NEWT) : pick(EVENT_TYPES_OTHER);
 
   // Valuation
   const valAmt = randDecimal(-5000000, 5000000, 2);
   const valCcy = pick(CURRENCIES);
   let delta = '';
   if (isOption) {
-    delta = errors.has('bad_delta')
-      ? randDecimal(1.1, 2.5, 4)
-      : randDecimal(-1.0, 1.0, 4);
+    delta = errors.has('bad_delta') ? randDecimal(1.1, 2.5, 4) : randDecimal(-1.0, 1.0, 4);
   }
 
   // Collateral
@@ -253,144 +233,153 @@ function generateSingleTrade(idx: number): string {
   const initMrgnPstd = hasCollateral ? randDecimal(10000, 2000000, 2) : null;
   const varMrgnPstd = hasCollateral ? randDecimal(5000, 1000000, 2) : null;
 
-  // Option fields
+  // Options
   const optnTp = isOption ? (rand() > 0.5 ? 'CALL' : 'PUTO') : null;
   const optnExrcStyle = isOption ? pick(EXERCISE_STYLES) : null;
   const strkPric = isOption ? randDecimal(0.5, 200, 4) : null;
-  const strkPricCcy = isOption ? pick(CURRENCIES) : null;
 
   // Spread (for swaps)
   const hasSpread = assetClass === 'INTR' && contractType === 'SWAP' && rand() > 0.5;
-  const sprd1 = hasSpread ? randDecimal(-0.01, 0.05, 6) : null;
+  const fxdRate1 = hasSpread ? randDecimal(0.01, 0.08, 6) : null;
   const sprd2 = hasSpread ? randDecimal(-0.01, 0.05, 6) : null;
 
-  // Beneficiary (sometimes)
+  // Beneficiary
   const hasBeneficiary = rand() > 0.6;
   const bnfcryLei = hasBeneficiary ? pick(LEI_POOL) : null;
 
-  // Package (sometimes)
+  // Package
   const hasPackage = rand() > 0.8;
   const pkgId = hasPackage ? `PKG-${effYear}-${padNum(randInt(1, 999), 3)}` : null;
 
-  // Build XML
-  let xml = `  <TradData>\n    <${action.wrapper}>\n`;
+  // ═══ Build XML with CORRECT ASIC structure ═══
+  let xml = `  <TradData>\n    <Rpt>\n      <${action.wrapper}>\n`;
 
-  // Transaction ID
-  xml += `      <TxId>\n        <UnqTradIdr>${uti}</UnqTradIdr>\n      </TxId>\n`;
+  // RptgTmStmp — direct child of action wrapper
+  xml += `        <RptgTmStmp>${rptgTimestamp}</RptgTmStmp>\n`;
 
-  // Counterparty Specific Data
-  xml += `      <CtrPtySpcfcData>\n`;
-  xml += `        <RptgCtrPty>\n`;
-  xml += `          <Id><Lgl><LEI>${rptgLei}</LEI></Lgl></Id>\n`;
-  xml += `          <Drctn><DrctnOfTheFrstLeg>${direction1}</DrctnOfTheFrstLeg></Drctn>\n`;
-  xml += `          <DrclyLkdActvty>false</DrclyLkdActvty>\n`;
-  xml += `        </RptgCtrPty>\n`;
-  xml += `        <OthrCtrPty>\n`;
-  xml += `          <Id><Lgl><LEI>${displayOthrLei}</LEI></Lgl></Id>\n`;
-  xml += `          <Ctry>${othrCtry}</Ctry>\n`;
-  xml += `          <Drctn><DrctnOfTheFrstLeg>${direction2}</DrctnOfTheFrstLeg></Drctn>\n`;
-  xml += `        </OthrCtrPty>\n`;
+  // CptrPtySpcfcData > CtrPty
+  xml += `        <CptrPtySpcfcData>\n          <CtrPty>\n`;
+  // Reporting Entity
+  xml += `            <NttyRspnsblForRpt><LEI>${rptgLei}</LEI></NttyRspnsblForRpt>\n`;
+  // CP1
+  xml += `            <RptgCtrPty>\n`;
+  xml += `              <Id><Lgl><Id><LEI>${rptgLei}</LEI></Id></Lgl></Id>\n`;
+  xml += `              <Ntr>${rand() > 0.5 ? 'F' : 'N'}</Ntr>\n`;
+  xml += `              <DrctnOrSide><Drctn>\n`;
+  xml += `                <DrctnOfTheFrstLeg>${direction1}</DrctnOfTheFrstLeg>\n`;
+  xml += `                <DrctnOfTheScndLeg>${direction2}</DrctnOfTheScndLeg>\n`;
+  xml += `              </Drctn></DrctnOrSide>\n`;
+  xml += `              <DrclyLkdActvty>false</DrclyLkdActvty>\n`;
+  xml += `            </RptgCtrPty>\n`;
+  // CP2
+  xml += `            <OthrCtrPty><IdTp><Lgl>\n`;
+  xml += `              <Id><LEI>${displayOthrLei}</LEI></Id>\n`;
+  xml += `              <Ctry>${othrCtry}</Ctry>\n`;
+  xml += `            </Lgl></IdTp></OthrCtrPty>\n`;
+  // Submitting Agent
+  xml += `            <SubmitgAgt><LEI>${rptgLei}</LEI></SubmitgAgt>\n`;
+  // Beneficiary
   if (bnfcryLei) {
-    xml += `        <Bnfcry><Id><Lgl><LEI>${bnfcryLei}</LEI></Lgl></Id></Bnfcry>\n`;
+    xml += `            <Bnfcry><Lgl><Id><LEI>${bnfcryLei}</LEI></Id></Lgl></Bnfcry>\n`;
   }
-  xml += `      </CtrPtySpcfcData>\n`;
+  // Valuation (under CtrPty)
+  xml += `            <Valtn>\n`;
+  xml += `              <CtrctVal><Amt>${valAmt}</Amt><Ccy>${valCcy}</Ccy></CtrctVal>\n`;
+  xml += `              <TmStmp><DtTm>${generateTimestamp(execDate, 15, 17)}</DtTm></TmStmp>\n`;
+  xml += `              <Tp>MTOM</Tp>\n`;
+  if (delta) xml += `              <Dlt>${delta}</Dlt>\n`;
+  xml += `            </Valtn>\n`;
+  xml += `          </CtrPty>\n        </CptrPtySpcfcData>\n`;
 
-  // Common Trade Data
-  xml += `      <CmonTradData>\n`;
+  // CmonTradData
+  xml += `        <CmonTradData>\n`;
 
-  // Product Data
-  xml += `        <PdctData>\n`;
-  if (upi) xml += `          <UPI>${upi}</UPI>\n`;
-  xml += `          <Clssfctn><Cd>${cfi}</Cd></Clssfctn>\n`;
-  xml += `          <CtrctTp>${contractType}</CtrctTp>\n`;
-  xml += `          <AsstClss>${assetClass}</AsstClss>\n`;
-  xml += `        </PdctData>\n`;
+  // CtrctData
+  xml += `          <CtrctData>\n`;
+  xml += `            <PdctId>\n`;
+  if (upi) xml += `              <UnqPdctIdr>${upi}</UnqPdctIdr>\n`;
+  xml += `              <Clssfctn><Cd>${cfi}</Cd></Clssfctn>\n`;
+  xml += `            </PdctId>\n`;
+  xml += `            <CtrctTp>${contractType}</CtrctTp>\n`;
+  xml += `            <AsstClss>${assetClass}</AsstClss>\n`;
+  xml += `            <SttlmCcy><Ccy>${pick(CURRENCIES)}</Ccy></SttlmCcy>\n`;
+  xml += `          </CtrctData>\n`;
 
+  // TxData
+  xml += `          <TxData>\n`;
+  // UTI
+  xml += `            <TxId><UnqTxIdr>${uti}</UnqTxIdr></TxId>\n`;
   // Dates
-  xml += `        <ExctnDtTm>${execTimestamp}</ExctnDtTm>\n`;
+  xml += `            <ExctnTmStmp>${execTimestamp}</ExctnTmStmp>\n`;
   if (!isExit) {
-    xml += `        <FctvDt>${effDate}</FctvDt>\n`;
-    xml += `        <XpryDt>${xpryDate}</XpryDt>\n`;
-    xml += `        <MtrtyDt>${mtrtyDate}</MtrtyDt>\n`;
+    xml += `            <FctvDt>${effDate}</FctvDt>\n`;
+    xml += `            <XprtnDt>${xpryDate}</XprtnDt>\n`;
+    xml += `            <MtrtyDt>${mtrtyDate}</MtrtyDt>\n`;
   }
-  xml += `        <RptgDtTm>${rptgTimestamp}</RptgDtTm>\n`;
-
+  // Derivative Event
+  xml += `            <DerivEvt>\n`;
+  xml += `              <Tp>${eventType}</Tp>\n`;
+  xml += `              <TmStmp><DtTm>${execTimestamp}</DtTm></TmStmp>\n`;
+  xml += `            </DerivEvt>\n`;
   // Clearing
-  xml += `        <TradClr><ClrSts>\n`;
+  xml += `            <TradClr><ClrSts>\n`;
   if (cleared === 'Y') {
-    xml += `          <Clrd><Dtls><CCP><LEI>${ccpLei}</LEI></CCP></Dtls></Clrd>\n`;
+    xml += `              <Clrd><CCP><LEI>${ccpLei}</LEI></CCP></Clrd>\n`;
   } else if (cleared === 'I') {
-    xml += `          <IntndToClr/>\n`;
+    xml += `              <IntndToClr/>\n`;
   } else {
-    xml += `          <NonClrd/>\n`;
+    xml += `              <NonClrd/>\n`;
   }
-  xml += `        </ClrSts></TradClr>\n`;
-
-  // Venue & Master Agreement
-  xml += `        <TradgVn><Id>${venue}</Id></TradgVn>\n`;
-  xml += `        <MstrAgrmt><Tp><Cd>${masterAgrmt}</Cd></Tp></MstrAgrmt>\n`;
-
-  // Delivery Type
-  xml += `        <DlvryTp>${deliveryType}</DlvryTp>\n`;
-
+  xml += `            </ClrSts></TradClr>\n`;
+  // Platform
+  xml += `            <PltfmIdr>${venue}</PltfmIdr>\n`;
+  // Master Agreement
+  xml += `            <MstrAgrmt><Tp><Cd>${masterAgrmt}</Cd></Tp></MstrAgrmt>\n`;
   // Notional Amounts
-  xml += `        <NtnlAmt>\n`;
-  xml += `          <Amt><FrstLeg>${notional1}</FrstLeg>`;
-  if (notional2) xml += `<ScndLeg>${notional2}</ScndLeg>`;
-  xml += `</Amt>\n`;
-  xml += `          <Ccy><FrstLeg>${ccy1}</FrstLeg>`;
-  if (notional2) xml += `<ScndLeg>${ccy2}</ScndLeg>`;
-  xml += `</Ccy>\n`;
-  xml += `        </NtnlAmt>\n`;
-
+  xml += `            <NtnlAmt>\n`;
+  xml += `              <FrstLeg><Amt><Amt>${notional1}</Amt><Ccy>${ccy1}</Ccy></Amt></FrstLeg>\n`;
+  if (notional2) {
+    xml += `              <ScndLeg><Amt><Amt>${notional2}</Amt><Ccy>${ccy2}</Ccy></Amt></ScndLeg>\n`;
+  }
+  xml += `            </NtnlAmt>\n`;
   // Price
-  xml += `        <Pric><Dcml>${price}</Dcml><Ccy>${priceCcy}</Ccy></Pric>\n`;
-
-  // Spread
-  if (sprd1 !== null) {
-    xml += `        <Sprd><FrstLeg>${sprd1}</FrstLeg>`;
-    if (sprd2 !== null) xml += `<ScndLeg>${sprd2}</ScndLeg>`;
-    xml += `</Sprd>\n`;
+  xml += `            <TxPric><Pric><Dcml>${price}</Dcml></Pric></TxPric>\n`;
+  // Interest Rate
+  if (fxdRate1 !== null || sprd2 !== null) {
+    xml += `            <IntrstRate>\n`;
+    if (fxdRate1 !== null) {
+      xml += `              <FrstLeg><Fxd><Rate><Dcml>${fxdRate1}</Dcml></Rate></Fxd></FrstLeg>\n`;
+    }
+    if (sprd2 !== null) {
+      xml += `              <ScndLeg><Fltg><Sprd><Dcml>${sprd2}</Dcml></Sprd></Fltg></ScndLeg>\n`;
+    }
+    xml += `            </IntrstRate>\n`;
   }
-
-  // Strike Price (options)
-  if (strkPric !== null) {
-    xml += `        <StrkPric><Dcml>${strkPric}</Dcml>`;
-    if (strkPricCcy) xml += `<Ccy>${strkPricCcy}</Ccy>`;
-    xml += `</StrkPric>\n`;
+  // Options
+  if (isOption) {
+    xml += `            <Optn>\n`;
+    if (strkPric !== null) xml += `              <StrkPric><Dcml>${strkPric}</Dcml></StrkPric>\n`;
+    if (optnTp) xml += `              <Tp>${optnTp}</Tp>\n`;
+    if (optnExrcStyle) xml += `              <ExrcStyle>${optnExrcStyle}</ExrcStyle>\n`;
+    xml += `            </Optn>\n`;
   }
-
-  // Option fields
-  if (optnTp) xml += `        <OptnTp>${optnTp}</OptnTp>\n`;
-  if (optnExrcStyle) xml += `        <OptnExrcStyle>${optnExrcStyle}</OptnExrcStyle>\n`;
-
   // Package
   if (pkgId) {
-    xml += `        <PckgData><Id>${pkgId}</Id></PckgData>\n`;
+    xml += `            <Packg><CmplxTradId>${pkgId}</CmplxTradId></Packg>\n`;
   }
+  xml += `          </TxData>\n`;
+  xml += `        </CmonTradData>\n`;
 
-  xml += `      </CmonTradData>\n`;
-
-  // Technical Attributes
-  xml += `      <TechAttrbts><EvtTp>${eventType}</EvtTp></TechAttrbts>\n`;
-
-  // Collateral Data
+  // Collateral Data (direct child of action)
   if (hasCollateral) {
-    xml += `      <CollData>\n`;
-    xml += `        <PrtflCd><Id>COLL-PTF-${padNum(idx + 1, 3)}</Id></PrtflCd>\n`;
-    if (initMrgnPstd) xml += `        <InitlMrgnPstd><Amt>${initMrgnPstd}</Amt></InitlMrgnPstd>\n`;
-    if (varMrgnPstd) xml += `        <VartnMrgnPstd><Amt>${varMrgnPstd}</Amt></VartnMrgnPstd>\n`;
-    xml += `      </CollData>\n`;
+    xml += `        <CollData>\n`;
+    xml += `          <PrtflCd><Id>COLL-PTF-${padNum(idx + 1, 3)}</Id></PrtflCd>\n`;
+    if (initMrgnPstd) xml += `          <InitlMrgnPstd><Amt>${initMrgnPstd}</Amt></InitlMrgnPstd>\n`;
+    if (varMrgnPstd) xml += `          <VartnMrgnPstd><Amt>${varMrgnPstd}</Amt></VartnMrgnPstd>\n`;
+    xml += `        </CollData>\n`;
   }
 
-  // Valuation Data
-  xml += `      <ValtnData>\n`;
-  xml += `        <MrkToMktVal><Amt>${valAmt}</Amt><Ccy>${valCcy}</Ccy></MrkToMktVal>\n`;
-  xml += `        <ValtnDtTm>${generateTimestamp(execDate, 15, 17)}</ValtnDtTm>\n`;
-  if (delta) xml += `        <Dlt>${delta}</Dlt>\n`;
-  xml += `      </ValtnData>\n`;
-
-  xml += `    </${action.wrapper}>\n  </TradData>`;
+  xml += `      </${action.wrapper}>\n    </Rpt>\n  </TradData>`;
   return xml;
 }
 

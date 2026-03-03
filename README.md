@@ -1,73 +1,125 @@
-# React + TypeScript + Vite
+# Stanley — ASIC Derivative Reporting Validator
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A browser-based validation tool for ASIC (Australian Securities & Investments Commission) derivative trade reports. It parses ISO 20022 `auth.030.001.04` (DerivativesTradeReportV04) XML messages and validates them against the ASIC Derivative Transaction Rules (Reporting) 2024 — Schedule 1 Technical Guidance.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **XML Parsing** — Parses `auth.030.001.04` messages with full namespace-aware traversal following the ASIC ISO 20022 Mapping Document v1.1 (Feb 2025)
+- **130 Validation Rules** — Comprehensive rule coverage across 11 categories
+- **Action-Type Awareness** — Rules are conditional on action type (NEWT, MODI, CORR, TERM, VALU, EROR, POSC, REVI)
+- **Inline Fix Editing** — Failed fields with known XML paths can be edited inline and re-validated
+- **Sample XML** — Built-in sample with deliberate errors for demonstration
+- **File Upload** — Upload `.xml` files directly for validation
+- **Filtering** — Filter results by PASS, FAIL, or N/A status
 
-## React Compiler
+## Validation Rule Coverage
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| Category | Rules | Description |
+|----------|-------|-------------|
+| Counterparty | ASIC-001 to ASIC-020 | Reporting entity, CP1/CP2 LEI, beneficiary, broker, execution agent, clearing member, submitting agent, direction, nature |
+| Identifier | ASIC-021 to ASIC-030 | UTI format/length/characters, prior UTI, UTI != Prior UTI, event ID, secondary TX ID |
+| Product | ASIC-031 to ASIC-040 | UPI (ISO 4914), contract type, asset class, CFI, settlement currency, underlier |
+| Date & Timestamp | ASIC-041 to ASIC-055 | Execution/effective/expiration/maturity/reporting timestamps, timezone checks, cross-field date validations |
+| Clearing & Trading | ASIC-056 to ASIC-065 | Cleared status, CCP LEI, platform identifier (MIC), clearing member, non-cleared reason, master agreement |
+| Notional & Quantity | ASIC-066 to ASIC-078 | Notional amounts/currencies for both legs, numeric/non-negative checks, FX-specific requirements |
+| Price | ASIC-079 to ASIC-095 | Price, fixed rates, spreads, strike price, option type/exercise style/premium, exchange rate |
+| Valuation | ASIC-096 to ASIC-105 | Valuation amount/currency/timestamp, delta range, VALU action mandates, valuation type |
+| Action & Event | ASIC-106 to ASIC-118 | Action type detection, event type per-action cross-validation, EROR/POSC/REVI checks |
+| Collateral | ASIC-119 to ASIC-124 | Initial/variation margin posted/received, portfolio code |
+| Package | ASIC-125 to ASIC-130 | Package ID, package price/spread, IRS fixed rate/spread checks, FX exchange rate |
 
-## Expanding the ESLint configuration
+## XML Structure
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+The parser expects the correct ISO 20022 hierarchy per the ASIC mapping document:
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+DerivsTradRpt
+  TradData
+    Rpt
+      {Action}                          (New, Mod, Crrctn, Termntn, ValtnUpd, Err, PrtOut, Rvv)
+        RptgTmStmp
+        CptrPtySpcfcData
+          CtrPty
+            NttyRspnsblForRpt
+            RptgCtrPty
+            OthrCtrPty
+            SubmitgAgt
+            Bnfcry
+            Valtn                       (for VALU action)
+        CmonTradData
+          CtrctData
+            PdctId > UnqPdctIdr         (UPI)
+            AsstClss
+            CtrctTp
+            SttlmCcy
+          TxData
+            TxId > UnqTxIdr             (UTI)
+            ExctnTmStmp
+            FctvDt
+            XprtnDt
+            MtrtyDt
+            DerivEvt
+            TradClr
+            PltfmIdr
+            NtnlAmt
+            TxPric
+            IntrstRate
+            Optn
+            Packg
+        CollData
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Tech Stack
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- **Frontend:** React 19 + TypeScript (strict mode), Vite 7
+- **Deployment:** Docker (node:22-alpine), Railway
+- **Static serving:** `serve` package for production builds
+- **No backend** — all parsing and validation runs client-side in the browser
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Getting Started
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Build for production
+npm run build
+
+# Serve production build
+npm start
 ```
+
+## Key Commands
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start dev server (Vite HMR) |
+| `npm run build` | TypeScript check + Vite build |
+| `npm run lint` | ESLint |
+| `npm start` | Serve production build on PORT (default 3000) |
+
+## Project Structure
+
+```
+src/
+  App.tsx                — Main UI: XML input, file upload, validation results table with inline editing
+  App.css                — All styles
+  main.tsx               — React entry point
+  engine/
+    xmlParser.ts         — Parses auth.030 XML using DOMParser with four base elements
+                           (action, counterparty, contract, transaction)
+    validationRules.ts   — 130 validation rules (ASIC-001 to ASIC-130) split into
+                           category-based builders
+    sampleXml.ts         — Sample XML with deliberate errors for demo
+docs/
+  mapping-v1.1.pdf       — ASIC ISO 20022 Mapping Document (reference)
+```
+
+## References
+
+- [ASIC Derivative Transaction Rules (Reporting) 2024](https://www.legislation.gov.au/Series/F2024L00590)
+- [ISO 20022 auth.030.001.04 — DerivativesTradeReportV04](https://www.iso20022.org/catalogue-messages/additional-content-messages/derivatives-messages)
+- ASIC ISO 20022 Mapping Document v1.1 (Feb 2025)
