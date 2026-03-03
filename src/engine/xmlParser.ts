@@ -41,7 +41,20 @@ const ACTION_MAP: Record<string, string> = {
 
 const ACTION_WRAPPERS = Object.keys(ACTION_MAP);
 
+/**
+ * Find a direct child element by local name.
+ * Prefers direct children (by localName) to avoid matching deeply nested descendants
+ * when a tag name appears at multiple nesting levels (e.g., `Id > Lgl > Id > LEI`).
+ * Falls back to namespace-qualified descendant search, then non-namespace descendant search.
+ */
 function findChild(parent: Element, tag: string): Element | undefined {
+  // First: check direct children by localName (handles namespaced and non-namespaced)
+  for (let i = 0; i < parent.children.length; i++) {
+    if (parent.children[i].localName === tag) {
+      return parent.children[i];
+    }
+  }
+  // Fallback: descendant search (for documents with unexpected nesting)
   return parent.getElementsByTagNameNS(NS, tag)[0] ?? parent.getElementsByTagName(tag)[0];
 }
 
@@ -114,7 +127,9 @@ function parseTradDataElement(tradData: Element, xml: string, doc: Document): Pa
   }
 
   // === Establish four base elements ===
-  const cptrPtySpcfcData = getElement(actionEl, 'CptrPtySpcfcData');
+  // Support both ASIC abbreviation (CptrPtySpcfcData) and ISO 20022 XSD name (CtrPtySpcfcData)
+  const cptrPtySpcfcData = getElement(actionEl, 'CptrPtySpcfcData')
+    ?? getElement(actionEl, 'CtrPtySpcfcData');
   const ctrPty = cptrPtySpcfcData ? getElement(cptrPtySpcfcData, 'CtrPty') : null;
 
   const cmonTradData = getElement(actionEl, 'CmonTradData');
@@ -496,7 +511,8 @@ export function updateFieldInXml(xml: string, fieldName: string, newValue: strin
       baseEl = actionEl;
       break;
     case 'counterparty': {
-      const cptrPty = getElement(actionEl, 'CptrPtySpcfcData');
+      const cptrPty = getElement(actionEl, 'CptrPtySpcfcData')
+        ?? getElement(actionEl, 'CtrPtySpcfcData');
       baseEl = cptrPty ? getElement(cptrPty, 'CtrPty') : null;
       break;
     }

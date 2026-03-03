@@ -455,7 +455,6 @@ function App() {
                     ].join(' ')}
                     onClick={() => {
                       setSelectedTradeIdx(trade.index);
-                      setFilter('ALL');
                       setEditingRuleId(null);
                     }}
                   >
