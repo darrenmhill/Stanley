@@ -406,7 +406,7 @@ function generateSingleTrade(idx: number): string {
   }
   // Exchange Rate (for FX)
   if (xchgRate !== null) {
-    xml += `            <XchgRate><Rate>${xchgRate}</Rate></XchgRate>\n`;
+    xml += `            <Ccy><XchgRate>${xchgRate}</XchgRate></Ccy>\n`;
   }
   // Package
   if (pkgId) {

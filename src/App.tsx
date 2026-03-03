@@ -50,6 +50,92 @@ const RULE_CATEGORIES: { category: RuleCategory; range: string; description: str
   { category: 'Package', range: 'ASIC-125 to ASIC-130', description: 'Package ID, package price/spread, IRS fixed rate/spread checks, FX exchange rate' },
 ];
 
+// Instrument-to-XML-path reference data
+const INSTRUMENT_PATH_MAPPINGS: { instrument: string; description: string; fields: { field: string; xmlPath: string; mandatory: string }[] }[] = [
+  {
+    instrument: 'All Instruments',
+    description: 'Common fields applicable to all derivative instrument types',
+    fields: [
+      { field: 'UTI', xmlPath: 'CmonTradData/TxData/TxId/UnqTxIdr', mandatory: 'Yes' },
+      { field: 'PrrUTI', xmlPath: 'CmonTradData/TxData/PrrUnqTxIdr/UnqTxIdr', mandatory: 'Non-NEWT' },
+      { field: 'UPI', xmlPath: 'CmonTradData/CtrctData/PdctId/UnqPdctIdr', mandatory: 'Yes' },
+      { field: 'CtrctTp', xmlPath: 'CmonTradData/CtrctData/CtrctTp', mandatory: 'Yes' },
+      { field: 'AsstClss', xmlPath: 'CmonTradData/CtrctData/AsstClss', mandatory: 'Yes' },
+      { field: 'SttlmCcy', xmlPath: 'CmonTradData/CtrctData/SttlmCcy/Ccy', mandatory: 'Yes' },
+      { field: 'ExctnTmStmp', xmlPath: 'CmonTradData/TxData/ExctnTmStmp', mandatory: 'Yes' },
+      { field: 'FctvDt', xmlPath: 'CmonTradData/TxData/FctvDt', mandatory: 'Non-exit' },
+      { field: 'XpryDt', xmlPath: 'CmonTradData/TxData/XprtnDt', mandatory: 'Non-exit' },
+      { field: 'MtrtyDt', xmlPath: 'CmonTradData/TxData/MtrtyDt', mandatory: 'Non-exit' },
+      { field: 'NtnlAmt1', xmlPath: 'CmonTradData/TxData/NtnlAmt/FrstLeg/Amt/Amt', mandatory: 'Non-exit' },
+      { field: 'NtnlCcy1', xmlPath: 'CmonTradData/TxData/NtnlAmt/FrstLeg/Amt/Ccy', mandatory: 'With amount' },
+      { field: 'Pric', xmlPath: 'CmonTradData/TxData/TxPric/Pric/Dcml', mandatory: 'No' },
+      { field: 'PricCcy', xmlPath: 'CmonTradData/TxData/TxPric/Pric/MntryVal/Ccy', mandatory: 'Monetary price' },
+      { field: 'RptgTmStmp', xmlPath: '{Action}/RptgTmStmp', mandatory: 'Yes' },
+      { field: 'DrctnLeg1', xmlPath: 'CptrPtySpcfcData/CtrPty/RptgCtrPty/DrctnOrSide/Drctn/DrctnOfTheFrstLeg', mandatory: 'Yes' },
+      { field: 'DrctnLeg2', xmlPath: 'CptrPtySpcfcData/CtrPty/RptgCtrPty/DrctnOrSide/Drctn/DrctnOfTheScndLeg', mandatory: 'Two-legged' },
+      { field: 'Clrd', xmlPath: 'CmonTradData/TxData/TradClr/ClrSts/{Clrd|IntndToClr|NonClrd}', mandatory: 'Yes' },
+      { field: 'PltfmIdr', xmlPath: 'CmonTradData/TxData/PltfmIdr', mandatory: 'Non-exit' },
+      { field: 'MstrAgrmt.Tp', xmlPath: 'CmonTradData/TxData/MstrAgrmt/Tp/Cd', mandatory: 'No' },
+    ],
+  },
+  {
+    instrument: 'CURR (Currency/FX)',
+    description: 'Additional fields for FX derivatives — asset class CURR (swaps, forwards, options)',
+    fields: [
+      { field: 'NtnlAmt1', xmlPath: 'CmonTradData/TxData/NtnlAmt/FrstLeg/Amt/Amt', mandatory: 'Yes (CURR)' },
+      { field: 'NtnlCcy1', xmlPath: 'CmonTradData/TxData/NtnlAmt/FrstLeg/Amt/Ccy', mandatory: 'Yes (CURR)' },
+      { field: 'NtnlAmt2', xmlPath: 'CmonTradData/TxData/NtnlAmt/ScndLeg/Amt/Amt', mandatory: 'Yes (CURR)' },
+      { field: 'NtnlCcy2', xmlPath: 'CmonTradData/TxData/NtnlAmt/ScndLeg/Amt/Ccy', mandatory: 'Yes (CURR)' },
+      { field: 'XchgRate', xmlPath: 'CmonTradData/TxData/Ccy/XchgRate', mandatory: 'Yes (CURR)' },
+    ],
+  },
+  {
+    instrument: 'INTR + SWAP (Interest Rate Swap)',
+    description: 'Additional fields for IRS — asset class INTR with contract type SWAP',
+    fields: [
+      { field: 'FxdRate1', xmlPath: 'CmonTradData/TxData/IntrstRate/FrstLeg/Fxd/Rate/Dcml', mandatory: 'Yes (IRS)' },
+      { field: 'FxdRate2', xmlPath: 'CmonTradData/TxData/IntrstRate/ScndLeg/Fxd/Rate/Dcml', mandatory: 'No' },
+      { field: 'Sprd1', xmlPath: 'CmonTradData/TxData/IntrstRate/FrstLeg/Fltg/Sprd/Dcml', mandatory: 'No' },
+      { field: 'Sprd2', xmlPath: 'CmonTradData/TxData/IntrstRate/ScndLeg/Fltg/Sprd/Dcml', mandatory: 'Yes (IRS floating)' },
+      { field: 'NtnlAmt2', xmlPath: 'CmonTradData/TxData/NtnlAmt/ScndLeg/Amt/Amt', mandatory: 'No' },
+      { field: 'NtnlCcy2', xmlPath: 'CmonTradData/TxData/NtnlAmt/ScndLeg/Amt/Ccy', mandatory: 'With amount' },
+    ],
+  },
+  {
+    instrument: 'OPTN (Options)',
+    description: 'Additional fields for options — contract type OPTN across all asset classes',
+    fields: [
+      { field: 'StrkPric', xmlPath: 'CmonTradData/TxData/Optn/StrkPric/Dcml', mandatory: 'Yes (OPTN)' },
+      { field: 'OptnTp', xmlPath: 'CmonTradData/TxData/Optn/Tp', mandatory: 'Yes (OPTN)' },
+      { field: 'OptnExrcStyle', xmlPath: 'CmonTradData/TxData/Optn/ExrcStyle', mandatory: 'Yes (OPTN)' },
+      { field: 'OptnPrm', xmlPath: 'CmonTradData/TxData/Optn/Prmm/Amt', mandatory: 'No' },
+      { field: 'OptnPrmCcy', xmlPath: 'CmonTradData/TxData/Optn/Prmm/Ccy', mandatory: 'With premium' },
+    ],
+  },
+  {
+    instrument: 'Valuation (VALU action)',
+    description: 'Valuation fields under counterparty data — primarily for ValtnUpd actions',
+    fields: [
+      { field: 'Valtn.Amt', xmlPath: 'CptrPtySpcfcData/CtrPty/Valtn/CtrctVal/Amt', mandatory: 'Yes (VALU)' },
+      { field: 'Valtn.Ccy', xmlPath: 'CptrPtySpcfcData/CtrPty/Valtn/CtrctVal/Ccy', mandatory: 'Yes (VALU)' },
+      { field: 'Valtn.TmStmp', xmlPath: 'CptrPtySpcfcData/CtrPty/Valtn/TmStmp/DtTm', mandatory: 'Yes (VALU)' },
+      { field: 'Valtn.Tp', xmlPath: 'CptrPtySpcfcData/CtrPty/Valtn/Tp', mandatory: 'Yes (VALU)' },
+      { field: 'Valtn.Dlt', xmlPath: 'CptrPtySpcfcData/CtrPty/Valtn/Dlt', mandatory: 'OPTN only' },
+    ],
+  },
+  {
+    instrument: 'Collateral',
+    description: 'Collateral data fields — direct child of the action wrapper element',
+    fields: [
+      { field: 'Coll.PrtflCd', xmlPath: '{Action}/CollData/PrtflCd/Id', mandatory: 'No' },
+      { field: 'Coll.InitlMrgnPstd', xmlPath: '{Action}/CollData/InitlMrgnPstd/Amt', mandatory: 'No' },
+      { field: 'Coll.InitlMrgnRcvd', xmlPath: '{Action}/CollData/InitlMrgnRcvd/Amt', mandatory: 'No' },
+      { field: 'Coll.VartnMrgnPstd', xmlPath: '{Action}/CollData/VartnMrgnPstd/Amt', mandatory: 'No' },
+      { field: 'Coll.VartnMrgnRcvd', xmlPath: '{Action}/CollData/VartnMrgnRcvd/Amt', mandatory: 'No' },
+    ],
+  },
+];
+
 function App() {
   const [xml, setXml] = useState('');
   const [trades, setTrades] = useState<TradeEntry[] | null>(null);
@@ -59,6 +145,7 @@ function App() {
   const [showXml, setShowXml] = useState(false);
   const [validationKey, setValidationKey] = useState(0);
   const [showRulesRef, setShowRulesRef] = useState(false);
+  const [showPathsRef, setShowPathsRef] = useState(false);
 
   // Grid inline editing state
   const [gridEditCell, setGridEditCell] = useState<{ row: number; field: string } | null>(null);
@@ -276,6 +363,9 @@ function App() {
           <button className="btn btn-rules-ref" onClick={() => setShowRulesRef(!showRulesRef)}>
             {showRulesRef ? 'Hide Rules' : 'Rules Reference'}
           </button>
+          <button className="btn btn-paths-ref" onClick={() => setShowPathsRef(!showPathsRef)}>
+            {showPathsRef ? 'Hide Paths' : 'XML Path Reference'}
+          </button>
         </div>
         {showXml && (
           <textarea
@@ -419,6 +509,39 @@ function App() {
               </tbody>
             </table>
           )}
+        </section>
+      )}
+
+      {/* ─── Instrument to XML Path Reference ─────────────── */}
+      {showPathsRef && (
+        <section className="paths-ref-section">
+          <h2>Instrument to XML Path Reference</h2>
+          <p className="paths-ref-subtitle">
+            XML element paths per instrument type — relative to TradData/Rpt/{'{'}Action{'}'} wrapper
+          </p>
+          {INSTRUMENT_PATH_MAPPINGS.map((group) => (
+            <div key={group.instrument} className="paths-ref-group">
+              <h3>{group.instrument} <span className="paths-ref-desc">— {group.description}</span></h3>
+              <table className="paths-ref-table">
+                <thead>
+                  <tr>
+                    <th>Field</th>
+                    <th>XML Path</th>
+                    <th>Mandatory</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {group.fields.map((f) => (
+                    <tr key={`${group.instrument}-${f.field}`}>
+                      <td className="mono">{f.field}</td>
+                      <td className="mono paths-ref-path">{f.xmlPath}</td>
+                      <td>{f.mandatory}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
         </section>
       )}
 
