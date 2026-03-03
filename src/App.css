@@ -306,6 +306,75 @@
   color: #a0aec0;
 }
 
+/* ─── Edit Controls ─────────────────────────────────────────────── */
+.btn-fix {
+  margin-left: 0.5rem;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid #e53e3e;
+  border-radius: 4px;
+  background: white;
+  color: #e53e3e;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  vertical-align: middle;
+}
+.btn-fix:hover {
+  background: #e53e3e;
+  color: white;
+}
+
+.edit-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.edit-input {
+  width: 100%;
+  padding: 0.3rem 0.4rem;
+  border: 2px solid #4299e1;
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.78rem;
+  background: white;
+  color: #2d3748;
+  box-sizing: border-box;
+}
+.edit-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.3);
+}
+
+.edit-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.btn-inline {
+  padding: 0.2rem 0.5rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-save {
+  background: #48bb78;
+  color: white;
+}
+.btn-save:hover {
+  background: #38a169;
+}
+.btn-cancel {
+  background: #e2e8f0;
+  color: #4a5568;
+}
+.btn-cancel:hover {
+  background: #cbd5e0;
+}
+
 /* ─── Footer ─────────────────────────────────────────────────────── */
 .footer {
   text-align: center;
@@ -371,5 +440,29 @@
 
   .expected-cell {
     color: #a0aec0;
+  }
+
+  .btn-fix {
+    border-color: #fc8181;
+    color: #fc8181;
+    background: transparent;
+  }
+  .btn-fix:hover {
+    background: #fc8181;
+    color: #1a202c;
+  }
+
+  .edit-input {
+    background: #2d3748;
+    color: #e2e8f0;
+    border-color: #63b3ed;
+  }
+
+  .btn-cancel {
+    background: #4a5568;
+    color: #e2e8f0;
+  }
+  .btn-cancel:hover {
+    background: #718096;
   }
 }

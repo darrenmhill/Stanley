@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { parseDerivativesTradeReport } from './engine/xmlParser';
+import { parseDerivativesTradeReport, updateFieldInXml, FIELD_PATHS } from './engine/xmlParser';
 import { validateReport, type ValidationResult } from './engine/validationRules';
 import { SAMPLE_XML } from './engine/sampleXml';
 import './App.css';
@@ -12,11 +12,14 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterStatus>('ALL');
   const [actionType, setActionType] = useState<string | null>(null);
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
 
   const runValidation = useCallback((input: string) => {
     setError(null);
     setResults(null);
     setActionType(null);
+    setEditingRuleId(null);
     if (!input.trim()) {
       setError('Please paste an XML message or load the sample.');
       return;
@@ -50,6 +53,21 @@ function App() {
       runValidation(text);
     };
     reader.readAsText(file);
+  };
+
+  const isEditable = (r: ValidationResult) =>
+    r.status === 'FAIL' && !!FIELD_PATHS[r.field];
+
+  const startEdit = (r: ValidationResult) => {
+    setEditingRuleId(r.ruleId);
+    setEditValue(r.actual ?? '');
+  };
+
+  const handleSaveEdit = (fieldName: string) => {
+    const newXml = updateFieldInXml(xml, fieldName, editValue);
+    setXml(newXml);
+    setEditingRuleId(null);
+    runValidation(newXml);
   };
 
   const filtered = results
@@ -168,7 +186,35 @@ function App() {
                       <td>{r.category}</td>
                       <td className="mono">{r.field}</td>
                       <td className="desc-cell">{r.description}</td>
-                      <td className="mono">{r.actual ?? <span className="null-val">(empty)</span>}</td>
+                      <td className="mono">
+                        {editingRuleId === r.ruleId ? (
+                          <div className="edit-cell">
+                            <input
+                              className="edit-input"
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveEdit(r.field);
+                                if (e.key === 'Escape') setEditingRuleId(null);
+                              }}
+                              autoFocus
+                            />
+                            <div className="edit-actions">
+                              <button className="btn-inline btn-save" onClick={() => handleSaveEdit(r.field)}>Save</button>
+                              <button className="btn-inline btn-cancel" onClick={() => setEditingRuleId(null)}>Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            {r.actual ?? <span className="null-val">(empty)</span>}
+                            {isEditable(r) && (
+                              <button className="btn-fix" onClick={() => startEdit(r)} title="Fix this value">
+                                Fix
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </td>
                       <td className="expected-cell">{r.expected}</td>
                     </tr>
                   ))

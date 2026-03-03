@@ -268,3 +268,97 @@ export function parseDerivativesTradeReport(xml: string): ParsedReport {
     fields,
   };
 }
+
+/**
+ * Maps validation field names to their XML element paths.
+ * base: 'action' = relative to action wrapper (New/Mod/etc.)
+ * base: 'common' = relative to CmonTradData
+ */
+export const FIELD_PATHS: Record<string, { base: 'action' | 'common'; tags: string[] }> = {
+  'RptgCtrPty.LEI': { base: 'action', tags: ['CtrPtySpcfcData', 'RptgCtrPty', 'Id', 'Lgl', 'LEI'] },
+  'OthrCtrPty.LEI': { base: 'action', tags: ['CtrPtySpcfcData', 'OthrCtrPty', 'Id', 'Lgl', 'LEI'] },
+  'OthrCtrPty.Ctry': { base: 'action', tags: ['CtrPtySpcfcData', 'OthrCtrPty', 'Ctry'] },
+  'CtrPty1.Drctn': { base: 'action', tags: ['CtrPtySpcfcData', 'RptgCtrPty', 'Drctn', 'DrctnOfTheFrstLeg'] },
+  'UTI': { base: 'action', tags: ['TxId', 'UnqTradIdr'] },
+  'UPI': { base: 'common', tags: ['PdctData', 'UPI'] },
+  'CtrctTp': { base: 'common', tags: ['PdctData', 'CtrctTp'] },
+  'AsstClss': { base: 'common', tags: ['PdctData', 'AsstClss'] },
+  'ExctnTmStmp': { base: 'common', tags: ['ExctnDtTm'] },
+  'FctvDt': { base: 'common', tags: ['FctvDt'] },
+  'XpryDt': { base: 'common', tags: ['XpryDt'] },
+  'MtrtyDt': { base: 'common', tags: ['MtrtyDt'] },
+  'RptgTmStmp': { base: 'common', tags: ['RptgDtTm'] },
+  'CCP.LEI': { base: 'common', tags: ['TradClr', 'ClrSts', 'Clrd', 'Dtls', 'CCP', 'LEI'] },
+  'NtnlAmt1': { base: 'common', tags: ['NtnlAmt', 'Amt', 'FrstLeg'] },
+  'NtnlCcy1': { base: 'common', tags: ['NtnlAmt', 'Ccy', 'FrstLeg'] },
+  'NtnlAmt2': { base: 'common', tags: ['NtnlAmt', 'Amt', 'ScndLeg'] },
+  'NtnlCcy2': { base: 'common', tags: ['NtnlAmt', 'Ccy', 'ScndLeg'] },
+  'Pric': { base: 'common', tags: ['Pric', 'Dcml'] },
+  'PricCcy': { base: 'common', tags: ['Pric', 'Ccy'] },
+  'StrkPric': { base: 'common', tags: ['StrkPric', 'Dcml'] },
+  'OptnTp': { base: 'common', tags: ['OptnTp'] },
+  'OptnExrcStyle': { base: 'common', tags: ['OptnExrcStyle'] },
+  'Coll.InitlMrgnPstd': { base: 'action', tags: ['CollData', 'InitlMrgnPstd', 'Amt'] },
+  'Coll.VartnMrgnPstd': { base: 'action', tags: ['CollData', 'VartnMrgnPstd', 'Amt'] },
+  'Valtn.Amt': { base: 'action', tags: ['ValtnData', 'MrkToMktVal', 'Amt'] },
+  'Valtn.Ccy': { base: 'action', tags: ['ValtnData', 'MrkToMktVal', 'Ccy'] },
+  'Valtn.TmStmp': { base: 'action', tags: ['ValtnData', 'ValtnDtTm'] },
+  'Valtn.Dlt': { base: 'action', tags: ['ValtnData', 'Dlt'] },
+  'EvtTp': { base: 'action', tags: ['TechAttrbts', 'EvtTp'] },
+};
+
+/**
+ * Update a field value in the raw XML string.
+ * Navigates to the target element (creating missing elements along the path)
+ * and sets its text content to the new value.
+ */
+export function updateFieldInXml(xml: string, fieldName: string, newValue: string): string {
+  const pathDef = FIELD_PATHS[fieldName];
+  if (!pathDef) return xml;
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, 'text/xml');
+
+  const root =
+    doc.getElementsByTagNameNS(NS, 'DerivsTradRpt')[0] ??
+    doc.getElementsByTagName('DerivsTradRpt')[0] ??
+    doc.documentElement;
+
+  const tradData =
+    root.getElementsByTagNameNS(NS, 'TradData')[0] ??
+    root.getElementsByTagName('TradData')[0];
+  if (!tradData) return xml;
+
+  const actionWrappers = ['New', 'Mod', 'Crrctn', 'Termntn', 'ValtnUpd', 'Err', 'PrtOut', 'Rvv'];
+  let actionEl: Element | null = null;
+  for (const w of actionWrappers) {
+    actionEl = getElement(tradData, w);
+    if (actionEl) break;
+  }
+  if (!actionEl) return xml;
+
+  let baseEl: Element;
+  if (pathDef.base === 'common') {
+    const common = getElement(actionEl, 'CmonTradData');
+    if (!common) return xml;
+    baseEl = common;
+  } else {
+    baseEl = actionEl;
+  }
+
+  // Navigate to target element, creating missing elements along the way
+  let current: Element = baseEl;
+  for (const tag of pathDef.tags) {
+    let child = findChild(current, tag);
+    if (!child) {
+      child = current.namespaceURI
+        ? doc.createElementNS(current.namespaceURI, tag)
+        : doc.createElement(tag);
+      current.appendChild(child);
+    }
+    current = child;
+  }
+
+  current.textContent = newValue;
+  return new XMLSerializer().serializeToString(doc);
+}
