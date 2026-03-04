@@ -1,6 +1,16 @@
 /**
- * XML Parser for ISO 20022 auth.030 DerivativesTradeReport messages.
+ * XML Parser for ISO 20022 auth.030 DerivativesTradeReportV04 messages.
  * Supports single and multi-trade parsing with field-level editing.
+ *
+ * Structure per ASIC ISO 20022 Mapping Document v1.1 (Feb 2025):
+ *   DerivsTradRpt > TradData > Rpt > {Action} > {
+ *     RptgTmStmp,
+ *     CptrPtySpcfcData > CtrPty > { ... },
+ *     CmonTradData > {
+ *       CtrctData > { ... },
+ *       TxData > { ... }
+ *     }
+ *   }
  */
 
 export interface ParsedField {
@@ -18,9 +28,33 @@ export interface ParsedReport {
 
 const NS = 'urn:iso:std:iso:20022:tech:xsd:auth.030.001.04';
 
-const ACTION_WRAPPERS = ['New', 'Mod', 'Crrctn', 'Termntn', 'ValtnUpd', 'Err', 'PrtOut', 'Rvv'];
+const ACTION_MAP: Record<string, string> = {
+  New: 'NEWT',
+  Mod: 'MODI',
+  Crrctn: 'CORR',
+  Termntn: 'TERM',
+  ValtnUpd: 'VALU',
+  Err: 'EROR',
+  PrtOut: 'POSC',
+  Rvv: 'REVI',
+};
 
+const ACTION_WRAPPERS = Object.keys(ACTION_MAP);
+
+/**
+ * Find a direct child element by local name.
+ * Prefers direct children (by localName) to avoid matching deeply nested descendants
+ * when a tag name appears at multiple nesting levels (e.g., `Id > Lgl > Id > LEI`).
+ * Falls back to namespace-qualified descendant search, then non-namespace descendant search.
+ */
 function findChild(parent: Element, tag: string): Element | undefined {
+  // First: check direct children by localName (handles namespaced and non-namespaced)
+  for (let i = 0; i < parent.children.length; i++) {
+    if (parent.children[i].localName === tag) {
+      return parent.children[i];
+    }
+  }
+  // Fallback: descendant search (for documents with unexpected nesting)
   return parent.getElementsByTagNameNS(NS, tag)[0] ?? parent.getElementsByTagName(tag)[0];
 }
 
@@ -46,122 +80,250 @@ function elementExists(parent: Element, ...tags: string[]): boolean {
   return getElement(parent, ...tags) !== null;
 }
 
-function detectActionType(tradData: Element): string | null {
-  const actionMap: Record<string, string> = {
-    New: 'NEWT',
-    Mod: 'MODI',
-    Crrctn: 'CORR',
-    Termntn: 'TERM',
-    ValtnUpd: 'VALU',
-    Err: 'EROR',
-    PrtOut: 'POSC',
-    Rvv: 'REVI',
-  };
-  for (const [tag, code] of Object.entries(actionMap)) {
-    if (elementExists(tradData, tag)) {
+/**
+ * Get an attribute value from an element found by path traversal.
+ */
+function getAttributeValue(parent: Element, attr: string, ...tags: string[]): string | null {
+  const el = getElement(parent, ...tags);
+  return el?.getAttribute(attr)?.trim() ?? null;
+}
+
+/**
+ * Find the action container — supports Rpt wrapper (correct per spec) or direct fallback.
+ */
+function findActionContainer(tradData: Element): Element {
+  const rpt = getElement(tradData, 'Rpt');
+  if (rpt) return rpt;
+  return tradData;
+}
+
+function detectActionType(container: Element): string | null {
+  for (const [tag, code] of Object.entries(ACTION_MAP)) {
+    if (elementExists(container, tag)) {
       return code;
     }
   }
   return null;
 }
 
+function findActionElement(container: Element): Element | null {
+  for (const w of ACTION_WRAPPERS) {
+    const el = getElement(container, w);
+    if (el) return el;
+  }
+  return null;
+}
+
 /**
- * Extract all fields from a single TradData element.
+ * Extract all fields from a single TradData element using correct ASIC paths.
  */
 function parseTradDataElement(tradData: Element, xml: string, doc: Document): ParsedReport {
-  const actionType = detectActionType(tradData);
-
-  let actionEl: Element | null = null;
-  for (const w of ACTION_WRAPPERS) {
-    actionEl = getElement(tradData, w);
-    if (actionEl) break;
-  }
+  const actionContainer = findActionContainer(tradData);
+  const actionType = detectActionType(actionContainer);
+  const actionEl = findActionElement(actionContainer);
 
   if (!actionEl) {
     throw new Error('No action type wrapper element found (New, Mod, Crrctn, etc.)');
   }
 
+  // === Establish four base elements ===
+  // Support both ASIC abbreviation (CptrPtySpcfcData) and ISO 20022 XSD name (CtrPtySpcfcData)
+  const cptrPtySpcfcData = getElement(actionEl, 'CptrPtySpcfcData')
+    ?? getElement(actionEl, 'CtrPtySpcfcData');
+  const ctrPty = cptrPtySpcfcData ? getElement(cptrPtySpcfcData, 'CtrPty') : null;
+
+  const cmonTradData = getElement(actionEl, 'CmonTradData');
+  const ctrctData = cmonTradData ? getElement(cmonTradData, 'CtrctData') : null;
+  const txData = cmonTradData ? getElement(cmonTradData, 'TxData') : null;
+
   const fields = new Map<string, string | null>();
 
-  // === Counterparty Data ===
-  fields.set('RptgCtrPty.LEI', getTextContent(actionEl, 'CtrPtySpcfcData', 'RptgCtrPty', 'Id', 'Lgl', 'LEI'));
-  fields.set('OthrCtrPty.LEI', getTextContent(actionEl, 'CtrPtySpcfcData', 'OthrCtrPty', 'Id', 'Lgl', 'LEI'));
-  fields.set('OthrCtrPty.PrtryId', getTextContent(actionEl, 'CtrPtySpcfcData', 'OthrCtrPty', 'Id', 'Lgl', 'Prtry', 'Id'));
-  fields.set('OthrCtrPty.Ctry', getTextContent(actionEl, 'CtrPtySpcfcData', 'OthrCtrPty', 'Ctry'));
-  fields.set('Bnfcry.LEI', getTextContent(actionEl, 'CtrPtySpcfcData', 'Bnfcry', 'Id', 'Lgl', 'LEI'));
-  fields.set('CtrPty1.Drctn', getTextContent(actionEl, 'CtrPtySpcfcData', 'RptgCtrPty', 'Drctn', 'DrctnOfTheFrstLeg'));
-  fields.set('CtrPty2.Drctn', getTextContent(actionEl, 'CtrPtySpcfcData', 'OthrCtrPty', 'Drctn', 'DrctnOfTheFrstLeg'));
-  fields.set('RptgCtrPty.DrclyLkdActvty', getTextContent(actionEl, 'CtrPtySpcfcData', 'RptgCtrPty', 'DrclyLkdActvty'));
+  // ═══════════════════════════════════════════════════════════════════
+  // COUNTERPARTY DATA (from CtrPty element)
+  // ═══════════════════════════════════════════════════════════════════
 
-  // === Common Trade Data ===
-  const cmonTradData = getElement(actionEl, 'CmonTradData');
+  fields.set('NttyRspnsblForRpt.LEI',
+    ctrPty ? getTextContent(ctrPty, 'NttyRspnsblForRpt', 'LEI') : null);
 
-  // UTI
-  fields.set('UTI', getTextContent(actionEl, 'TxId', 'UnqTradIdr'));
-  if (!fields.get('UTI') && cmonTradData) {
-    fields.set('UTI', getTextContent(cmonTradData, 'TxId', 'UnqTradIdr'));
+  fields.set('RptgCtrPty.LEI',
+    ctrPty ? getTextContent(ctrPty, 'RptgCtrPty', 'Id', 'Lgl', 'Id', 'LEI') : null);
+
+  fields.set('RptgCtrPty.Ntr',
+    ctrPty ? getTextContent(ctrPty, 'RptgCtrPty', 'Ntr') : null);
+
+  fields.set('OthrCtrPty.LEI',
+    ctrPty ? getTextContent(ctrPty, 'OthrCtrPty', 'IdTp', 'Lgl', 'Id', 'LEI') : null);
+
+  fields.set('OthrCtrPty.PrtryId',
+    ctrPty ? getTextContent(ctrPty, 'OthrCtrPty', 'IdTp', 'Prtry', 'Id') : null);
+
+  fields.set('OthrCtrPty.Ctry',
+    ctrPty ? getTextContent(ctrPty, 'OthrCtrPty', 'IdTp', 'Lgl', 'Ctry') : null);
+  if (!fields.get('OthrCtrPty.Ctry') && ctrPty) {
+    fields.set('OthrCtrPty.Ctry',
+      getTextContent(ctrPty, 'OthrCtrPty', 'IdTp', 'Prtry', 'Ctry'));
   }
 
-  // Prior UTI
-  fields.set('PrrUTI', getTextContent(actionEl, 'TxId', 'PrrUnqTradIdr'));
+  fields.set('Bnfcry.LEI',
+    ctrPty ? getTextContent(ctrPty, 'Bnfcry', 'Lgl', 'Id', 'LEI') : null);
+  fields.set('Brkr.LEI',
+    ctrPty ? getTextContent(ctrPty, 'Brkr', 'LEI') : null);
+  fields.set('ExctnAgt.LEI',
+    ctrPty ? getTextContent(ctrPty, 'ExctnAgt', 'LEI') : null);
+  fields.set('ClrMmb.LEI',
+    ctrPty ? getTextContent(ctrPty, 'ClrMmb', 'Lgl', 'Id', 'LEI') : null);
+  fields.set('SubmitgAgt.LEI',
+    ctrPty ? getTextContent(ctrPty, 'SubmitgAgt', 'LEI') : null);
 
-  if (cmonTradData) {
-    // Product Data
-    fields.set('UPI', getTextContent(cmonTradData, 'PdctData', 'UPI'));
-    fields.set('PdctClssfctn', getTextContent(cmonTradData, 'PdctData', 'Clssfctn', 'Cd'));
-    fields.set('CtrctTp', getTextContent(cmonTradData, 'PdctData', 'CtrctTp'));
-    fields.set('AsstClss', getTextContent(cmonTradData, 'PdctData', 'AsstClss'));
+  fields.set('CtrPtySd',
+    ctrPty ? getTextContent(ctrPty, 'RptgCtrPty', 'DrctnOrSide', 'CtrPtySd') : null);
+  fields.set('DrctnLeg1',
+    ctrPty ? getTextContent(ctrPty, 'RptgCtrPty', 'DrctnOrSide', 'Drctn', 'DrctnOfTheFrstLeg') : null);
+  fields.set('DrctnLeg2',
+    ctrPty ? getTextContent(ctrPty, 'RptgCtrPty', 'DrctnOrSide', 'Drctn', 'DrctnOfTheScndLeg') : null);
+  fields.set('RptgCtrPty.DrclyLkdActvty',
+    ctrPty ? getTextContent(ctrPty, 'RptgCtrPty', 'DrclyLkdActvty') : null);
 
-    // Dates and Timestamps
-    fields.set('ExctnTmStmp', getTextContent(cmonTradData, 'ExctnDtTm'));
-    fields.set('FctvDt', getTextContent(cmonTradData, 'FctvDt'));
-    fields.set('XpryDt', getTextContent(cmonTradData, 'XpryDt'));
-    fields.set('MtrtyDt', getTextContent(cmonTradData, 'MtrtyDt'));
-    fields.set('EarlyTermntnDt', getTextContent(cmonTradData, 'EarlyTermntnDt'));
-    fields.set('RptgTmStmp', getTextContent(cmonTradData, 'RptgDtTm'));
+  // Valuation data (under CtrPty for VALU actions)
+  fields.set('Valtn.Amt',
+    ctrPty ? getTextContent(ctrPty, 'Valtn', 'CtrctVal', 'Amt') : null);
+  fields.set('Valtn.Ccy',
+    ctrPty ? getTextContent(ctrPty, 'Valtn', 'CtrctVal', 'Ccy') : null);
+  fields.set('Valtn.TmStmp',
+    ctrPty ? getTextContent(ctrPty, 'Valtn', 'TmStmp', 'DtTm') : null);
+  fields.set('Valtn.Tp',
+    ctrPty ? getTextContent(ctrPty, 'Valtn', 'Tp') : null);
+  fields.set('Valtn.Dlt',
+    ctrPty ? getTextContent(ctrPty, 'Valtn', 'Dlt') : null);
 
-    // Clearing
-    const clrd = getElement(cmonTradData, 'TradClr', 'ClrSts', 'Clrd');
-    const intndToClr = getElement(cmonTradData, 'TradClr', 'ClrSts', 'IntndToClr');
-    const nonClrd = getElement(cmonTradData, 'TradClr', 'ClrSts', 'NonClrd');
+  // ═══════════════════════════════════════════════════════════════════
+  // CONTRACT DATA (from CtrctData element)
+  // ═══════════════════════════════════════════════════════════════════
+
+  fields.set('UPI',
+    ctrctData ? getTextContent(ctrctData, 'PdctId', 'UnqPdctIdr') : null);
+  fields.set('PdctClssfctn',
+    ctrctData ? getTextContent(ctrctData, 'PdctId', 'Clssfctn', 'Cd') : null);
+  fields.set('CtrctTp',
+    ctrctData ? getTextContent(ctrctData, 'CtrctTp') : null);
+  fields.set('AsstClss',
+    ctrctData ? getTextContent(ctrctData, 'AsstClss') : null);
+  fields.set('SttlmCcy',
+    ctrctData ? getTextContent(ctrctData, 'SttlmCcy', 'Ccy') : null);
+  fields.set('UndrlygId',
+    ctrctData ? getTextContent(ctrctData, 'Undrlyr', 'Id') : null);
+
+  // ═══════════════════════════════════════════════════════════════════
+  // TRANSACTION DATA (from TxData element)
+  // ═══════════════════════════════════════════════════════════════════
+
+  fields.set('UTI',
+    txData ? getTextContent(txData, 'TxId', 'UnqTxIdr') : null);
+  fields.set('PrrUTI',
+    txData ? getTextContent(txData, 'PrrUnqTxIdr', 'UnqTxIdr') : null);
+  fields.set('ScndryTxId',
+    txData ? getTextContent(txData, 'ScndryTxId') : null);
+
+  fields.set('ExctnTmStmp',
+    txData ? getTextContent(txData, 'ExctnTmStmp') : null);
+  fields.set('FctvDt',
+    txData ? getTextContent(txData, 'FctvDt') : null);
+  fields.set('XpryDt',
+    txData ? getTextContent(txData, 'XprtnDt') : null);
+  fields.set('MtrtyDt',
+    txData ? getTextContent(txData, 'MtrtyDt') : null);
+  fields.set('EarlyTermntnDt',
+    txData ? getTextContent(txData, 'EarlyTermntnDt') : null);
+
+  // Reporting Timestamp — direct child of action wrapper
+  fields.set('RptgTmStmp', getTextContent(actionEl, 'RptgTmStmp'));
+
+  // Event Data
+  fields.set('EvtTp',
+    txData ? getTextContent(txData, 'DerivEvt', 'Tp') : null);
+  fields.set('EvtTmStmp',
+    txData ? getTextContent(txData, 'DerivEvt', 'TmStmp', 'DtTm') : null);
+  fields.set('EvtId',
+    txData ? getTextContent(txData, 'DerivEvt', 'Id', 'EvtIdr') : null);
+
+  // Clearing
+  if (txData) {
+    const clrd = getElement(txData, 'TradClr', 'ClrSts', 'Clrd');
+    const intndToClr = getElement(txData, 'TradClr', 'ClrSts', 'IntndToClr');
+    const nonClrd = getElement(txData, 'TradClr', 'ClrSts', 'NonClrd');
     if (clrd) fields.set('Clrd', 'Y');
     else if (intndToClr) fields.set('Clrd', 'I');
     else if (nonClrd) fields.set('Clrd', 'N');
     else fields.set('Clrd', null);
-
-    fields.set('CCP.LEI', getTextContent(cmonTradData, 'TradClr', 'ClrSts', 'Clrd', 'Dtls', 'CCP', 'LEI'));
-    fields.set('ExctnVn', getTextContent(cmonTradData, 'TradgVn', 'Id'));
-    fields.set('MstrAgrmt.Tp', getTextContent(cmonTradData, 'MstrAgrmt', 'Tp', 'Cd'));
-
-    // Notional Amounts
-    fields.set('NtnlAmt1', getTextContent(cmonTradData, 'NtnlAmt', 'Amt', 'FrstLeg'));
-    fields.set('NtnlCcy1', getTextContent(cmonTradData, 'NtnlAmt', 'Ccy', 'FrstLeg'));
-    fields.set('NtnlAmt2', getTextContent(cmonTradData, 'NtnlAmt', 'Amt', 'ScndLeg'));
-    fields.set('NtnlCcy2', getTextContent(cmonTradData, 'NtnlAmt', 'Ccy', 'ScndLeg'));
-
-    // Price Data
-    fields.set('Pric', getTextContent(cmonTradData, 'Pric', 'Dcml'));
-    if (!fields.get('Pric')) {
-      fields.set('Pric', getTextContent(cmonTradData, 'Pric', 'FxdRate'));
-    }
-    fields.set('PricCcy', getTextContent(cmonTradData, 'Pric', 'Ccy'));
-    fields.set('Sprd1', getTextContent(cmonTradData, 'Sprd', 'FrstLeg'));
-    fields.set('Sprd2', getTextContent(cmonTradData, 'Sprd', 'ScndLeg'));
-
-    // Strike Price
-    fields.set('StrkPric', getTextContent(cmonTradData, 'StrkPric', 'Dcml'));
-    fields.set('StrkPricCcy', getTextContent(cmonTradData, 'StrkPric', 'Ccy'));
-
-    // Options
-    fields.set('OptnTp', getTextContent(cmonTradData, 'OptnTp'));
-    fields.set('OptnExrcStyle', getTextContent(cmonTradData, 'OptnExrcStyle'));
-
-    // Delivery Type
-    fields.set('DlvryTp', getTextContent(cmonTradData, 'DlvryTp'));
-
-    // Package
-    fields.set('PckgId', getTextContent(cmonTradData, 'PckgData', 'Id'));
+  } else {
+    fields.set('Clrd', null);
   }
+
+  fields.set('CCP.LEI',
+    txData ? getTextContent(txData, 'TradClr', 'ClrSts', 'Clrd', 'CCP', 'LEI') : null);
+  fields.set('NonClrdRsn',
+    txData ? getTextContent(txData, 'TradClr', 'ClrSts', 'NonClrd') : null);
+  fields.set('PltfmIdr',
+    txData ? getTextContent(txData, 'PltfmIdr') : null);
+  fields.set('MstrAgrmt.Tp',
+    txData ? getTextContent(txData, 'MstrAgrmt', 'Tp', 'Cd') : null);
+
+  // Notional Amounts
+  fields.set('NtnlAmt1',
+    txData ? getTextContent(txData, 'NtnlAmt', 'FrstLeg', 'Amt', 'Amt') : null);
+  fields.set('NtnlCcy1',
+    txData ? (getAttributeValue(txData, 'Ccy', 'NtnlAmt', 'FrstLeg', 'Amt', 'Amt') ??
+              getTextContent(txData, 'NtnlAmt', 'FrstLeg', 'Amt', 'Ccy')) : null);
+  fields.set('NtnlAmt2',
+    txData ? getTextContent(txData, 'NtnlAmt', 'ScndLeg', 'Amt', 'Amt') : null);
+  fields.set('NtnlCcy2',
+    txData ? (getAttributeValue(txData, 'Ccy', 'NtnlAmt', 'ScndLeg', 'Amt', 'Amt') ??
+              getTextContent(txData, 'NtnlAmt', 'ScndLeg', 'Amt', 'Ccy')) : null);
+  fields.set('Qty1',
+    txData ? getTextContent(txData, 'NtnlAmt', 'FrstLeg', 'NtnlQty', 'Qty') : null);
+  fields.set('Qty2',
+    txData ? getTextContent(txData, 'NtnlAmt', 'ScndLeg', 'NtnlQty', 'Qty') : null);
+
+  // Price Data
+  fields.set('Pric',
+    txData ? (getTextContent(txData, 'TxPric', 'Pric', 'Dcml') ??
+              getTextContent(txData, 'TxPric', 'Pric', 'MntryVal', 'Amt')) : null);
+  fields.set('PricCcy',
+    txData ? (getTextContent(txData, 'TxPric', 'Pric', 'MntryVal', 'Ccy') ??
+              getAttributeValue(txData, 'Ccy', 'TxPric', 'Pric', 'MntryVal', 'Amt')) : null);
+  fields.set('PricNtn',
+    txData ? getTextContent(txData, 'TxPric', 'Pric', 'BsisPtSprd') : null);
+  // Flag to indicate price was reported as monetary (not decimal rate)
+  fields.set('PricIsMntry',
+    txData && getElement(txData, 'TxPric', 'Pric', 'MntryVal') ? 'true' : null);
+
+  // Interest Rates
+  fields.set('FxdRate1',
+    txData ? getTextContent(txData, 'IntrstRate', 'FrstLeg', 'Fxd', 'Rate', 'Dcml') : null);
+  fields.set('FxdRate2',
+    txData ? getTextContent(txData, 'IntrstRate', 'ScndLeg', 'Fxd', 'Rate', 'Dcml') : null);
+  fields.set('Sprd1',
+    txData ? getTextContent(txData, 'IntrstRate', 'FrstLeg', 'Fltg', 'Sprd', 'Dcml') : null);
+  fields.set('Sprd2',
+    txData ? getTextContent(txData, 'IntrstRate', 'ScndLeg', 'Fltg', 'Sprd', 'Dcml') : null);
+
+  // Option fields
+  fields.set('StrkPric',
+    txData ? getTextContent(txData, 'Optn', 'StrkPric', 'Dcml') : null);
+  fields.set('StrkPricCcy',
+    txData ? getTextContent(txData, 'Optn', 'StrkPric', 'MntryVal', 'Ccy') : null);
+  fields.set('OptnTp',
+    txData ? getTextContent(txData, 'Optn', 'Tp') : null);
+  fields.set('OptnExrcStyle',
+    txData ? getTextContent(txData, 'Optn', 'ExrcStyle') : null);
+  fields.set('OptnPrm',
+    txData ? getTextContent(txData, 'Optn', 'Prmm', 'Amt') : null);
+  fields.set('OptnPrmCcy',
+    txData ? getTextContent(txData, 'Optn', 'Prmm', 'Ccy') : null);
+
+  // Exchange Rate
+  fields.set('XchgRate',
+    txData ? getTextContent(txData, 'Ccy', 'XchgRate') : null);
 
   // Collateral Data
   const collData = getElement(actionEl, 'CollData');
@@ -173,18 +335,13 @@ function parseTradDataElement(tradData: Element, xml: string, doc: Document): Pa
     fields.set('Coll.VartnMrgnRcvd', getTextContent(collData, 'VartnMrgnRcvd', 'Amt'));
   }
 
-  // Valuation Data
-  const valData = getElement(actionEl, 'ValtnData');
-  if (valData) {
-    fields.set('Valtn.Amt', getTextContent(valData, 'MrkToMktVal', 'Amt'));
-    fields.set('Valtn.Ccy', getTextContent(valData, 'MrkToMktVal', 'Ccy'));
-    fields.set('Valtn.TmStmp', getTextContent(valData, 'ValtnDtTm'));
-    fields.set('Valtn.Dlt', getTextContent(valData, 'Dlt'));
-    fields.set('Valtn.Mthd', getTextContent(valData, 'ValtnMthdlgy'));
-  }
-
-  // Event Type
-  fields.set('EvtTp', getTextContent(actionEl, 'TechAttrbts', 'EvtTp'));
+  // Package Data
+  fields.set('PckgId',
+    txData ? getTextContent(txData, 'Packg', 'CmplxTradId') : null);
+  fields.set('PckgPric',
+    txData ? getTextContent(txData, 'Packg', 'Pric', 'MntryVal', 'Amt') : null);
+  fields.set('PckgSprd',
+    txData ? getTextContent(txData, 'Packg', 'Sprd', 'Dcml') : null);
 
   return { raw: xml, doc, actionType, fields };
 }
@@ -218,7 +375,8 @@ export function parseDerivativesTradeReport(xml: string): ParsedReport {
 }
 
 /**
- * Parse all TradData elements from a multi-trade XML document.
+ * Parse all trade reports from a multi-trade XML document.
+ * Handles both multi-TradData files and multi-Rpt files (multiple Rpt within one TradData).
  * Returns an array of {index, report} objects. Validation is done by the caller.
  */
 export function parseAllTradeReports(xml: string): { index: number; report: ParsedReport }[] {
@@ -230,75 +388,116 @@ export function parseAllTradeReports(xml: string): { index: number; report: Pars
     throw new Error(`XML Parse Error: ${parseError.textContent}`);
   }
 
-  const root =
-    doc.getElementsByTagNameNS(NS, 'DerivsTradRpt')[0] ??
-    doc.getElementsByTagName('DerivsTradRpt')[0] ??
-    doc.documentElement;
+  const containers = getAllReportContainers(doc);
 
-  const tradDataElements = [
-    ...Array.from(root.getElementsByTagNameNS(NS, 'TradData')),
-    ...(root.getElementsByTagNameNS(NS, 'TradData').length === 0
-      ? Array.from(root.getElementsByTagName('TradData'))
-      : []),
-  ];
-
-  if (tradDataElements.length === 0) {
-    throw new Error('No <TradData> elements found in the XML document.');
+  if (containers.length === 0) {
+    throw new Error('No <TradData> or <Rpt> elements found in the XML document.');
   }
 
-  return tradDataElements.map((tradDataEl, index) => ({
-    index,
-    report: parseTradDataElement(tradDataEl, xml, doc),
-  }));
+  return containers.map((container, index) => {
+    try {
+      return { index, report: parseTradDataElement(container, xml, doc) };
+    } catch {
+      // Return a minimal report for malformed trade elements so other trades still display
+      return { index, report: { raw: xml, doc, actionType: null, fields: new Map<string, string | null>() } as ParsedReport };
+    }
+  });
 }
 
 /**
  * Maps validation field names to their XML element paths.
+ * base: 'action' = relative to action wrapper (New/Mod/etc.)
+ * base: 'counterparty' = relative to CptrPtySpcfcData > CtrPty
+ * base: 'contract' = relative to CmonTradData > CtrctData
+ * base: 'transaction' = relative to CmonTradData > TxData
  */
-export const FIELD_PATHS: Record<string, { base: 'action' | 'common'; tags: string[] }> = {
-  'RptgCtrPty.LEI': { base: 'action', tags: ['CtrPtySpcfcData', 'RptgCtrPty', 'Id', 'Lgl', 'LEI'] },
-  'OthrCtrPty.LEI': { base: 'action', tags: ['CtrPtySpcfcData', 'OthrCtrPty', 'Id', 'Lgl', 'LEI'] },
-  'OthrCtrPty.Ctry': { base: 'action', tags: ['CtrPtySpcfcData', 'OthrCtrPty', 'Ctry'] },
-  'CtrPty1.Drctn': { base: 'action', tags: ['CtrPtySpcfcData', 'RptgCtrPty', 'Drctn', 'DrctnOfTheFrstLeg'] },
-  'UTI': { base: 'action', tags: ['TxId', 'UnqTradIdr'] },
-  'UPI': { base: 'common', tags: ['PdctData', 'UPI'] },
-  'CtrctTp': { base: 'common', tags: ['PdctData', 'CtrctTp'] },
-  'AsstClss': { base: 'common', tags: ['PdctData', 'AsstClss'] },
-  'ExctnTmStmp': { base: 'common', tags: ['ExctnDtTm'] },
-  'FctvDt': { base: 'common', tags: ['FctvDt'] },
-  'XpryDt': { base: 'common', tags: ['XpryDt'] },
-  'MtrtyDt': { base: 'common', tags: ['MtrtyDt'] },
-  'RptgTmStmp': { base: 'common', tags: ['RptgDtTm'] },
-  'CCP.LEI': { base: 'common', tags: ['TradClr', 'ClrSts', 'Clrd', 'Dtls', 'CCP', 'LEI'] },
-  'NtnlAmt1': { base: 'common', tags: ['NtnlAmt', 'Amt', 'FrstLeg'] },
-  'NtnlCcy1': { base: 'common', tags: ['NtnlAmt', 'Ccy', 'FrstLeg'] },
-  'NtnlAmt2': { base: 'common', tags: ['NtnlAmt', 'Amt', 'ScndLeg'] },
-  'NtnlCcy2': { base: 'common', tags: ['NtnlAmt', 'Ccy', 'ScndLeg'] },
-  'Pric': { base: 'common', tags: ['Pric', 'Dcml'] },
-  'PricCcy': { base: 'common', tags: ['Pric', 'Ccy'] },
-  'StrkPric': { base: 'common', tags: ['StrkPric', 'Dcml'] },
-  'OptnTp': { base: 'common', tags: ['OptnTp'] },
-  'OptnExrcStyle': { base: 'common', tags: ['OptnExrcStyle'] },
+export const FIELD_PATHS: Record<string, { base: 'action' | 'counterparty' | 'contract' | 'transaction'; tags: string[] }> = {
+  // Counterparty fields
+  'NttyRspnsblForRpt.LEI': { base: 'counterparty', tags: ['NttyRspnsblForRpt', 'LEI'] },
+  'RptgCtrPty.LEI': { base: 'counterparty', tags: ['RptgCtrPty', 'Id', 'Lgl', 'Id', 'LEI'] },
+  'OthrCtrPty.LEI': { base: 'counterparty', tags: ['OthrCtrPty', 'IdTp', 'Lgl', 'Id', 'LEI'] },
+  'OthrCtrPty.Ctry': { base: 'counterparty', tags: ['OthrCtrPty', 'IdTp', 'Lgl', 'Ctry'] },
+  'Bnfcry.LEI': { base: 'counterparty', tags: ['Bnfcry', 'Lgl', 'Id', 'LEI'] },
+  'Brkr.LEI': { base: 'counterparty', tags: ['Brkr', 'LEI'] },
+  'ExctnAgt.LEI': { base: 'counterparty', tags: ['ExctnAgt', 'LEI'] },
+  'ClrMmb.LEI': { base: 'counterparty', tags: ['ClrMmb', 'Lgl', 'Id', 'LEI'] },
+  'SubmitgAgt.LEI': { base: 'counterparty', tags: ['SubmitgAgt', 'LEI'] },
+  'CtrPtySd': { base: 'counterparty', tags: ['RptgCtrPty', 'DrctnOrSide', 'CtrPtySd'] },
+  'DrctnLeg1': { base: 'counterparty', tags: ['RptgCtrPty', 'DrctnOrSide', 'Drctn', 'DrctnOfTheFrstLeg'] },
+  'DrctnLeg2': { base: 'counterparty', tags: ['RptgCtrPty', 'DrctnOrSide', 'Drctn', 'DrctnOfTheScndLeg'] },
+  'Valtn.Amt': { base: 'counterparty', tags: ['Valtn', 'CtrctVal', 'Amt'] },
+  'Valtn.Ccy': { base: 'counterparty', tags: ['Valtn', 'CtrctVal', 'Ccy'] },
+  'Valtn.TmStmp': { base: 'counterparty', tags: ['Valtn', 'TmStmp', 'DtTm'] },
+  'Valtn.Tp': { base: 'counterparty', tags: ['Valtn', 'Tp'] },
+  'Valtn.Dlt': { base: 'counterparty', tags: ['Valtn', 'Dlt'] },
+
+  // Contract fields
+  'UPI': { base: 'contract', tags: ['PdctId', 'UnqPdctIdr'] },
+  'PdctClssfctn': { base: 'contract', tags: ['PdctId', 'Clssfctn', 'Cd'] },
+  'CtrctTp': { base: 'contract', tags: ['CtrctTp'] },
+  'AsstClss': { base: 'contract', tags: ['AsstClss'] },
+  'SttlmCcy': { base: 'contract', tags: ['SttlmCcy', 'Ccy'] },
+
+  // Transaction fields
+  'UTI': { base: 'transaction', tags: ['TxId', 'UnqTxIdr'] },
+  'PrrUTI': { base: 'transaction', tags: ['PrrUnqTxIdr', 'UnqTxIdr'] },
+  'ExctnTmStmp': { base: 'transaction', tags: ['ExctnTmStmp'] },
+  'FctvDt': { base: 'transaction', tags: ['FctvDt'] },
+  'XpryDt': { base: 'transaction', tags: ['XprtnDt'] },
+  'MtrtyDt': { base: 'transaction', tags: ['MtrtyDt'] },
+  'RptgTmStmp': { base: 'action', tags: ['RptgTmStmp'] },
+  'CCP.LEI': { base: 'transaction', tags: ['TradClr', 'ClrSts', 'Clrd', 'CCP', 'LEI'] },
+  'PltfmIdr': { base: 'transaction', tags: ['PltfmIdr'] },
+  'NtnlAmt1': { base: 'transaction', tags: ['NtnlAmt', 'FrstLeg', 'Amt', 'Amt'] },
+  'NtnlCcy1': { base: 'transaction', tags: ['NtnlAmt', 'FrstLeg', 'Amt', 'Ccy'] },
+  'NtnlAmt2': { base: 'transaction', tags: ['NtnlAmt', 'ScndLeg', 'Amt', 'Amt'] },
+  'NtnlCcy2': { base: 'transaction', tags: ['NtnlAmt', 'ScndLeg', 'Amt', 'Ccy'] },
+  'Pric': { base: 'transaction', tags: ['TxPric', 'Pric', 'Dcml'] },
+  'PricCcy': { base: 'transaction', tags: ['TxPric', 'Pric', 'MntryVal', 'Ccy'] },
+  'FxdRate1': { base: 'transaction', tags: ['IntrstRate', 'FrstLeg', 'Fxd', 'Rate', 'Dcml'] },
+  'FxdRate2': { base: 'transaction', tags: ['IntrstRate', 'ScndLeg', 'Fxd', 'Rate', 'Dcml'] },
+  'Sprd1': { base: 'transaction', tags: ['IntrstRate', 'FrstLeg', 'Fltg', 'Sprd', 'Dcml'] },
+  'Sprd2': { base: 'transaction', tags: ['IntrstRate', 'ScndLeg', 'Fltg', 'Sprd', 'Dcml'] },
+  'StrkPric': { base: 'transaction', tags: ['Optn', 'StrkPric', 'Dcml'] },
+  'OptnTp': { base: 'transaction', tags: ['Optn', 'Tp'] },
+  'OptnExrcStyle': { base: 'transaction', tags: ['Optn', 'ExrcStyle'] },
+  'EvtTp': { base: 'transaction', tags: ['DerivEvt', 'Tp'] },
+  'EvtTmStmp': { base: 'transaction', tags: ['DerivEvt', 'TmStmp', 'DtTm'] },
+  'XchgRate': { base: 'transaction', tags: ['Ccy', 'XchgRate'] },
+  'PckgId': { base: 'transaction', tags: ['Packg', 'CmplxTradId'] },
   'Coll.InitlMrgnPstd': { base: 'action', tags: ['CollData', 'InitlMrgnPstd', 'Amt'] },
   'Coll.VartnMrgnPstd': { base: 'action', tags: ['CollData', 'VartnMrgnPstd', 'Amt'] },
-  'Valtn.Amt': { base: 'action', tags: ['ValtnData', 'MrkToMktVal', 'Amt'] },
-  'Valtn.Ccy': { base: 'action', tags: ['ValtnData', 'MrkToMktVal', 'Ccy'] },
-  'Valtn.TmStmp': { base: 'action', tags: ['ValtnData', 'ValtnDtTm'] },
-  'Valtn.Dlt': { base: 'action', tags: ['ValtnData', 'Dlt'] },
-  'EvtTp': { base: 'action', tags: ['TechAttrbts', 'EvtTp'] },
 };
 
 /**
- * Collect all TradData elements from parsed XML, respecting namespaces.
+ * Collect all report containers (Rpt elements, or TradData when no Rpt wrapper).
+ * A single TradData can contain multiple Rpt elements — each is a separate trade.
  */
-function getAllTradDataElements(doc: Document): Element[] {
+function getAllReportContainers(doc: Document): Element[] {
   const root =
     doc.getElementsByTagNameNS(NS, 'DerivsTradRpt')[0] ??
     doc.getElementsByTagName('DerivsTradRpt')[0] ??
     doc.documentElement;
 
   const nsElements = Array.from(root.getElementsByTagNameNS(NS, 'TradData'));
-  return nsElements.length > 0 ? nsElements : Array.from(root.getElementsByTagName('TradData'));
+  const tradDataElements = nsElements.length > 0 ? nsElements : Array.from(root.getElementsByTagName('TradData'));
+
+  const containers: Element[] = [];
+  for (const tradData of tradDataElements) {
+    const rpts: Element[] = [];
+    for (let i = 0; i < tradData.children.length; i++) {
+      if (tradData.children[i].localName === 'Rpt') {
+        rpts.push(tradData.children[i]);
+      }
+    }
+    if (rpts.length === 0) {
+      // No Rpt wrapper — action elements are directly under TradData
+      containers.push(tradData);
+    } else {
+      containers.push(...rpts);
+    }
+  }
+  return containers;
 }
 
 /**
@@ -312,26 +511,40 @@ export function updateFieldInXml(xml: string, fieldName: string, newValue: strin
   const parser = new DOMParser();
   const doc = parser.parseFromString(xml, 'text/xml');
 
-  const tradDataElements = getAllTradDataElements(doc);
-  const tradData = tradDataElements[tradeIndex];
-  if (!tradData) return xml;
+  const containers = getAllReportContainers(doc);
+  const container = containers[tradeIndex];
+  if (!container) return xml;
 
-  let actionEl: Element | null = null;
-  for (const w of ACTION_WRAPPERS) {
-    actionEl = getElement(tradData, w);
-    if (actionEl) break;
-  }
+  const actionContainer = findActionContainer(container);
+  const actionEl = findActionElement(actionContainer);
   if (!actionEl) return xml;
 
-  let baseEl: Element;
-  if (pathDef.base === 'common') {
-    const common = getElement(actionEl, 'CmonTradData');
-    if (!common) return xml;
-    baseEl = common;
-  } else {
-    baseEl = actionEl;
+  let baseEl: Element | null;
+  switch (pathDef.base) {
+    case 'action':
+      baseEl = actionEl;
+      break;
+    case 'counterparty': {
+      const cptrPty = getElement(actionEl, 'CptrPtySpcfcData')
+        ?? getElement(actionEl, 'CtrPtySpcfcData');
+      baseEl = cptrPty ? getElement(cptrPty, 'CtrPty') : null;
+      break;
+    }
+    case 'contract': {
+      const cmon = getElement(actionEl, 'CmonTradData');
+      baseEl = cmon ? getElement(cmon, 'CtrctData') : null;
+      break;
+    }
+    case 'transaction': {
+      const cmon = getElement(actionEl, 'CmonTradData');
+      baseEl = cmon ? getElement(cmon, 'TxData') : null;
+      break;
+    }
   }
 
+  if (!baseEl) return xml;
+
+  // Navigate to target element, creating missing elements along the way
   let current: Element = baseEl;
   for (const tag of pathDef.tags) {
     let child = findChild(current, tag);

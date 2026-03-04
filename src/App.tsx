@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { parseAllTradeReports, updateFieldInXml, FIELD_PATHS, type ParsedReport } from './engine/xmlParser';
-import { validateReport, type ValidationResult } from './engine/validationRules';
+import { validateReport, type ValidationResult, type RuleCategory } from './engine/validationRules';
 import { SAMPLE_XML } from './engine/sampleXml';
 import './App.css';
 
@@ -18,7 +18,7 @@ const GRID_FIELDS = [
   { key: 'UTI', label: 'UTI', truncate: 24 },
   { key: 'AsstClss', label: 'Asset' },
   { key: 'CtrctTp', label: 'Contract' },
-  { key: 'CtrPty1.Drctn', label: 'Dir' },
+  { key: 'DrctnLeg1', label: 'Dir' },
   { key: 'NtnlAmt1', label: 'Notional', numeric: true },
   { key: 'NtnlCcy1', label: 'Ccy' },
   { key: 'FctvDt', label: 'Eff. Date' },
@@ -35,6 +35,107 @@ function formatNotional(v: string | null | undefined): string {
   return n.toFixed(2);
 }
 
+// Rule category definitions for the rules reference section
+const RULE_CATEGORIES: { category: RuleCategory; range: string; description: string }[] = [
+  { category: 'Counterparty', range: 'ASIC-001 to ASIC-020', description: 'Reporting entity, CP1/CP2 LEI, beneficiary, broker, execution agent, clearing member, submitting agent, direction, nature' },
+  { category: 'Identifier', range: 'ASIC-021 to ASIC-030', description: 'UTI format/length/characters, prior UTI, UTI != Prior UTI, event ID, secondary TX ID' },
+  { category: 'Product', range: 'ASIC-031 to ASIC-040', description: 'UPI (ISO 4914), contract type, asset class, CFI, settlement currency, underlier' },
+  { category: 'Date & Timestamp', range: 'ASIC-041 to ASIC-055', description: 'Execution/effective/expiration/maturity/reporting timestamps, timezone checks, cross-field date validations' },
+  { category: 'Clearing & Trading', range: 'ASIC-056 to ASIC-065', description: 'Cleared status, CCP LEI, platform identifier (MIC), clearing member, non-cleared reason, master agreement' },
+  { category: 'Notional & Quantity', range: 'ASIC-066 to ASIC-078', description: 'Notional amounts/currencies for both legs, numeric/non-negative checks, FX-specific requirements' },
+  { category: 'Price', range: 'ASIC-079 to ASIC-095', description: 'Price, fixed rates, spreads, strike price, option type/exercise style/premium, exchange rate' },
+  { category: 'Valuation', range: 'ASIC-096 to ASIC-105', description: 'Valuation amount/currency/timestamp, delta range, VALU action mandates, valuation type' },
+  { category: 'Action & Event', range: 'ASIC-106 to ASIC-118', description: 'Action type detection, event type per-action cross-validation, EROR/POSC/REVI checks' },
+  { category: 'Collateral', range: 'ASIC-119 to ASIC-124', description: 'Initial/variation margin posted/received, portfolio code' },
+  { category: 'Package', range: 'ASIC-125 to ASIC-130', description: 'Package ID, package price/spread, IRS fixed rate/spread checks, FX exchange rate' },
+];
+
+// Instrument-to-XML-path reference data
+const INSTRUMENT_PATH_MAPPINGS: { instrument: string; description: string; fields: { field: string; xmlPath: string; mandatory: string }[] }[] = [
+  {
+    instrument: 'All Instruments',
+    description: 'Common fields applicable to all derivative instrument types',
+    fields: [
+      { field: 'UTI', xmlPath: 'CmonTradData/TxData/TxId/UnqTxIdr', mandatory: 'Yes' },
+      { field: 'PrrUTI', xmlPath: 'CmonTradData/TxData/PrrUnqTxIdr/UnqTxIdr', mandatory: 'Non-NEWT' },
+      { field: 'UPI', xmlPath: 'CmonTradData/CtrctData/PdctId/UnqPdctIdr', mandatory: 'Yes' },
+      { field: 'CtrctTp', xmlPath: 'CmonTradData/CtrctData/CtrctTp', mandatory: 'Yes' },
+      { field: 'AsstClss', xmlPath: 'CmonTradData/CtrctData/AsstClss', mandatory: 'Yes' },
+      { field: 'SttlmCcy', xmlPath: 'CmonTradData/CtrctData/SttlmCcy/Ccy', mandatory: 'No' },
+      { field: 'ExctnTmStmp', xmlPath: 'CmonTradData/TxData/ExctnTmStmp', mandatory: 'Yes' },
+      { field: 'FctvDt', xmlPath: 'CmonTradData/TxData/FctvDt', mandatory: 'Non-exit' },
+      { field: 'XpryDt', xmlPath: 'CmonTradData/TxData/XprtnDt', mandatory: 'No' },
+      { field: 'MtrtyDt', xmlPath: 'CmonTradData/TxData/MtrtyDt', mandatory: 'No' },
+      { field: 'NtnlAmt1', xmlPath: 'CmonTradData/TxData/NtnlAmt/FrstLeg/Amt/Amt', mandatory: 'Non-exit' },
+      { field: 'NtnlCcy1', xmlPath: 'CmonTradData/TxData/NtnlAmt/FrstLeg/Amt/Ccy', mandatory: 'With amount' },
+      { field: 'Pric', xmlPath: 'CmonTradData/TxData/TxPric/Pric/Dcml', mandatory: 'No' },
+      { field: 'PricCcy', xmlPath: 'CmonTradData/TxData/TxPric/Pric/MntryVal/Ccy', mandatory: 'Monetary price' },
+      { field: 'RptgTmStmp', xmlPath: '{Action}/RptgTmStmp', mandatory: 'Yes' },
+      { field: 'DrctnLeg1', xmlPath: 'CptrPtySpcfcData/CtrPty/RptgCtrPty/DrctnOrSide/Drctn/DrctnOfTheFrstLeg', mandatory: 'No' },
+      { field: 'DrctnLeg2', xmlPath: 'CptrPtySpcfcData/CtrPty/RptgCtrPty/DrctnOrSide/Drctn/DrctnOfTheScndLeg', mandatory: 'Two-legged' },
+      { field: 'Clrd', xmlPath: 'CmonTradData/TxData/TradClr/ClrSts/{Clrd|IntndToClr|NonClrd}', mandatory: 'Yes' },
+      { field: 'PltfmIdr', xmlPath: 'CmonTradData/TxData/PltfmIdr', mandatory: 'Non-exit' },
+      { field: 'MstrAgrmt.Tp', xmlPath: 'CmonTradData/TxData/MstrAgrmt/Tp/Cd', mandatory: 'No' },
+    ],
+  },
+  {
+    instrument: 'CURR (Currency/FX)',
+    description: 'Additional fields for FX derivatives — asset class CURR (swaps, forwards, options)',
+    fields: [
+      { field: 'NtnlAmt1', xmlPath: 'CmonTradData/TxData/NtnlAmt/FrstLeg/Amt/Amt', mandatory: 'Yes (CURR)' },
+      { field: 'NtnlCcy1', xmlPath: 'CmonTradData/TxData/NtnlAmt/FrstLeg/Amt/Ccy', mandatory: 'Yes (CURR)' },
+      { field: 'NtnlAmt2', xmlPath: 'CmonTradData/TxData/NtnlAmt/ScndLeg/Amt/Amt', mandatory: 'Yes (CURR)' },
+      { field: 'NtnlCcy2', xmlPath: 'CmonTradData/TxData/NtnlAmt/ScndLeg/Amt/Ccy', mandatory: 'Yes (CURR)' },
+      { field: 'XchgRate', xmlPath: 'CmonTradData/TxData/Ccy/XchgRate', mandatory: 'Yes (CURR)' },
+    ],
+  },
+  {
+    instrument: 'INTR + SWAP (Interest Rate Swap)',
+    description: 'Additional fields for IRS — asset class INTR with contract type SWAP',
+    fields: [
+      { field: 'FxdRate1', xmlPath: 'CmonTradData/TxData/IntrstRate/FrstLeg/Fxd/Rate/Dcml', mandatory: 'Yes (IRS)' },
+      { field: 'FxdRate2', xmlPath: 'CmonTradData/TxData/IntrstRate/ScndLeg/Fxd/Rate/Dcml', mandatory: 'No' },
+      { field: 'Sprd1', xmlPath: 'CmonTradData/TxData/IntrstRate/FrstLeg/Fltg/Sprd/Dcml', mandatory: 'No' },
+      { field: 'Sprd2', xmlPath: 'CmonTradData/TxData/IntrstRate/ScndLeg/Fltg/Sprd/Dcml', mandatory: 'Yes (IRS floating)' },
+      { field: 'NtnlAmt2', xmlPath: 'CmonTradData/TxData/NtnlAmt/ScndLeg/Amt/Amt', mandatory: 'No' },
+      { field: 'NtnlCcy2', xmlPath: 'CmonTradData/TxData/NtnlAmt/ScndLeg/Amt/Ccy', mandatory: 'With amount' },
+    ],
+  },
+  {
+    instrument: 'OPTN (Options)',
+    description: 'Additional fields for options — contract type OPTN across all asset classes',
+    fields: [
+      { field: 'StrkPric', xmlPath: 'CmonTradData/TxData/Optn/StrkPric/Dcml', mandatory: 'Yes (OPTN)' },
+      { field: 'OptnTp', xmlPath: 'CmonTradData/TxData/Optn/Tp', mandatory: 'Yes (OPTN)' },
+      { field: 'OptnExrcStyle', xmlPath: 'CmonTradData/TxData/Optn/ExrcStyle', mandatory: 'Yes (OPTN)' },
+      { field: 'OptnPrm', xmlPath: 'CmonTradData/TxData/Optn/Prmm/Amt', mandatory: 'No' },
+      { field: 'OptnPrmCcy', xmlPath: 'CmonTradData/TxData/Optn/Prmm/Ccy', mandatory: 'With premium' },
+    ],
+  },
+  {
+    instrument: 'Valuation (VALU action)',
+    description: 'Valuation fields under counterparty data — primarily for ValtnUpd actions',
+    fields: [
+      { field: 'Valtn.Amt', xmlPath: 'CptrPtySpcfcData/CtrPty/Valtn/CtrctVal/Amt', mandatory: 'Yes (VALU)' },
+      { field: 'Valtn.Ccy', xmlPath: 'CptrPtySpcfcData/CtrPty/Valtn/CtrctVal/Ccy', mandatory: 'Yes (VALU)' },
+      { field: 'Valtn.TmStmp', xmlPath: 'CptrPtySpcfcData/CtrPty/Valtn/TmStmp/DtTm', mandatory: 'Yes (VALU)' },
+      { field: 'Valtn.Tp', xmlPath: 'CptrPtySpcfcData/CtrPty/Valtn/Tp', mandatory: 'Yes (VALU)' },
+      { field: 'Valtn.Dlt', xmlPath: 'CptrPtySpcfcData/CtrPty/Valtn/Dlt', mandatory: 'OPTN only' },
+    ],
+  },
+  {
+    instrument: 'Collateral',
+    description: 'Collateral data fields — direct child of the action wrapper element',
+    fields: [
+      { field: 'Coll.PrtflCd', xmlPath: '{Action}/CollData/PrtflCd/Id', mandatory: 'No' },
+      { field: 'Coll.InitlMrgnPstd', xmlPath: '{Action}/CollData/InitlMrgnPstd/Amt', mandatory: 'No' },
+      { field: 'Coll.InitlMrgnRcvd', xmlPath: '{Action}/CollData/InitlMrgnRcvd/Amt', mandatory: 'No' },
+      { field: 'Coll.VartnMrgnPstd', xmlPath: '{Action}/CollData/VartnMrgnPstd/Amt', mandatory: 'No' },
+      { field: 'Coll.VartnMrgnRcvd', xmlPath: '{Action}/CollData/VartnMrgnRcvd/Amt', mandatory: 'No' },
+    ],
+  },
+];
+
 function App() {
   const [xml, setXml] = useState('');
   const [trades, setTrades] = useState<TradeEntry[] | null>(null);
@@ -43,6 +144,8 @@ function App() {
   const [filter, setFilter] = useState<FilterStatus>('ALL');
   const [showXml, setShowXml] = useState(false);
   const [validationKey, setValidationKey] = useState(0);
+  const [showRulesRef, setShowRulesRef] = useState(false);
+  const [showPathsRef, setShowPathsRef] = useState(false);
 
   // Grid inline editing state
   const [gridEditCell, setGridEditCell] = useState<{ row: number; field: string } | null>(null);
@@ -182,6 +285,52 @@ function App() {
       }
     : null;
 
+  // ─── Aggregate statistics across all trades ─────────────
+  const aggregateStats = useMemo(() => {
+    if (!trades) return null;
+    let totalRules = 0;
+    let totalPass = 0;
+    let totalFail = 0;
+    let totalNa = 0;
+    const categoryBreakdown = new Map<RuleCategory, { pass: number; fail: number; na: number }>();
+
+    for (const trade of trades) {
+      for (const r of trade.validation) {
+        totalRules++;
+        if (r.status === 'PASS') totalPass++;
+        else if (r.status === 'FAIL') totalFail++;
+        else totalNa++;
+
+        if (!categoryBreakdown.has(r.category)) {
+          categoryBreakdown.set(r.category, { pass: 0, fail: 0, na: 0 });
+        }
+        const cat = categoryBreakdown.get(r.category)!;
+        if (r.status === 'PASS') cat.pass++;
+        else if (r.status === 'FAIL') cat.fail++;
+        else cat.na++;
+      }
+    }
+
+    const passRate = totalRules > 0 ? ((totalPass / (totalPass + totalFail)) * 100).toFixed(1) : '0';
+
+    return { totalRules, totalPass, totalFail, totalNa, passRate, categoryBreakdown };
+  }, [trades]);
+
+  // ─── Rules by category (from actual validation results) ──
+  const rulesByCategory = useMemo(() => {
+    if (!trades || trades.length === 0) return null;
+    // Use the first trade to get the full rule list structure
+    const firstTrade = trades[0];
+    const grouped = new Map<RuleCategory, ValidationResult[]>();
+    for (const r of firstTrade.validation) {
+      if (!grouped.has(r.category)) {
+        grouped.set(r.category, []);
+      }
+      grouped.get(r.category)!.push(r);
+    }
+    return grouped;
+  }, [trades]);
+
   return (
     <div className="app">
       <header className="header">
@@ -211,6 +360,12 @@ function App() {
           <button className="btn btn-toggle-xml" onClick={() => setShowXml(!showXml)}>
             {showXml ? 'Hide XML' : 'Show XML'}
           </button>
+          <button className="btn btn-rules-ref" onClick={() => setShowRulesRef(!showRulesRef)}>
+            {showRulesRef ? 'Hide Rules' : 'Rules Reference'}
+          </button>
+          <button className="btn btn-paths-ref" onClick={() => setShowPathsRef(!showPathsRef)}>
+            {showPathsRef ? 'Hide Paths' : 'XML Path Reference'}
+          </button>
         </div>
         {showXml && (
           <textarea
@@ -227,6 +382,167 @@ function App() {
         <div className="error-banner">
           <strong>Error:</strong> {error}
         </div>
+      )}
+
+      {/* ─── Top-Level Aggregate Statistics ────────────────── */}
+      {trades && tradeSummary && aggregateStats && (
+        <section className="aggregate-section">
+          <div className="aggregate-header">
+            <h2>File Summary</h2>
+          </div>
+          <div className="aggregate-cards">
+            <div className="agg-card">
+              <span className="agg-num">{tradeSummary.total}</span>
+              <span className="agg-label">Total Trades</span>
+            </div>
+            <div className="agg-card agg-card-valid">
+              <span className="agg-num">{tradeSummary.valid}</span>
+              <span className="agg-label">Valid</span>
+            </div>
+            <div className="agg-card agg-card-errors">
+              <span className="agg-num">{tradeSummary.withErrors}</span>
+              <span className="agg-label">With Errors</span>
+            </div>
+            <div className="agg-card">
+              <span className="agg-num">{aggregateStats.totalRules.toLocaleString()}</span>
+              <span className="agg-label">Rules Checked</span>
+            </div>
+            <div className="agg-card agg-card-valid">
+              <span className="agg-num">{aggregateStats.totalPass.toLocaleString()}</span>
+              <span className="agg-label">Passed</span>
+            </div>
+            <div className="agg-card agg-card-errors">
+              <span className="agg-num">{aggregateStats.totalFail.toLocaleString()}</span>
+              <span className="agg-label">Failed</span>
+            </div>
+            <div className="agg-card">
+              <span className="agg-num">{aggregateStats.totalNa.toLocaleString()}</span>
+              <span className="agg-label">N/A</span>
+            </div>
+            <div className="agg-card agg-card-rate">
+              <span className="agg-num">{aggregateStats.passRate}%</span>
+              <span className="agg-label">Pass Rate</span>
+            </div>
+          </div>
+          <div className="category-breakdown">
+            <h3>Results by Category</h3>
+            <table className="category-table">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Passed</th>
+                  <th>Failed</th>
+                  <th>N/A</th>
+                  <th>Pass Rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {RULE_CATEGORIES.map(({ category }) => {
+                  const stats = aggregateStats.categoryBreakdown.get(category);
+                  if (!stats) return null;
+                  const catTotal = stats.pass + stats.fail;
+                  const rate = catTotal > 0 ? ((stats.pass / catTotal) * 100).toFixed(1) : '—';
+                  return (
+                    <tr key={category}>
+                      <td>{category}</td>
+                      <td className="mono stat-valid">{stats.pass.toLocaleString()}</td>
+                      <td className="mono stat-errors">{stats.fail.toLocaleString()}</td>
+                      <td className="mono">{stats.na.toLocaleString()}</td>
+                      <td className="mono">{rate}%</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* ─── Rules Reference Section ──────────────────────── */}
+      {showRulesRef && (
+        <section className="rules-ref-section">
+          <h2>Validation Rules Reference</h2>
+          <p className="rules-ref-subtitle">130 rules across 11 categories — ASIC Schedule 1 Technical Guidance (2024)</p>
+          {rulesByCategory ? (
+            // Show actual rules from validation results
+            Array.from(rulesByCategory.entries()).map(([category, rules]) => (
+              <div key={category} className="rules-ref-category">
+                <h3>{category} <span className="rules-ref-count">({rules.length} rules)</span></h3>
+                <table className="rules-ref-table">
+                  <thead>
+                    <tr>
+                      <th>Rule ID</th>
+                      <th>Field</th>
+                      <th>Description</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rules.map((r) => (
+                      <tr key={r.ruleId}>
+                        <td className="mono">{r.ruleId}</td>
+                        <td className="mono">{r.field}</td>
+                        <td>{r.description}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))
+          ) : (
+            // Show category summary when no data is loaded
+            <table className="rules-ref-table">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Rules</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                {RULE_CATEGORIES.map(({ category, range, description }) => (
+                  <tr key={category}>
+                    <td>{category}</td>
+                    <td className="mono">{range}</td>
+                    <td>{description}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      )}
+
+      {/* ─── Instrument to XML Path Reference ─────────────── */}
+      {showPathsRef && (
+        <section className="paths-ref-section">
+          <h2>Instrument to XML Path Reference</h2>
+          <p className="paths-ref-subtitle">
+            XML element paths per instrument type — relative to TradData/Rpt/{'{'}Action{'}'} wrapper
+          </p>
+          {INSTRUMENT_PATH_MAPPINGS.map((group) => (
+            <div key={group.instrument} className="paths-ref-group">
+              <h3>{group.instrument} <span className="paths-ref-desc">— {group.description}</span></h3>
+              <table className="paths-ref-table">
+                <thead>
+                  <tr>
+                    <th>Field</th>
+                    <th>XML Path</th>
+                    <th>Mandatory</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {group.fields.map((f) => (
+                    <tr key={`${group.instrument}-${f.field}`}>
+                      <td className="mono">{f.field}</td>
+                      <td className="mono paths-ref-path">{f.xmlPath}</td>
+                      <td>{f.mandatory}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </section>
       )}
 
       {/* ─── Trades Grid ────────────────────────────────────── */}
@@ -253,7 +569,20 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {trades.map((trade) => (
+                {trades.map((trade) => {
+                  // Collect grid field keys that have at least one FAIL rule
+                  const failedGridKeys = new Set<string>();
+                  for (const r of trade.validation) {
+                    if (r.status === 'FAIL') {
+                      for (const gf of GRID_FIELDS) {
+                        if (r.field === gf.key || r.field.startsWith(gf.key + ' ') || r.field.includes(' ' + gf.key)) {
+                          failedGridKeys.add(gf.key);
+                        }
+                      }
+                    }
+                  }
+
+                  return (
                   <tr
                     key={trade.index}
                     className={[
@@ -262,7 +591,6 @@ function App() {
                     ].join(' ')}
                     onClick={() => {
                       setSelectedTradeIdx(trade.index);
-                      setFilter('ALL');
                       setEditingRuleId(null);
                     }}
                   >
@@ -277,6 +605,7 @@ function App() {
                       const val = trade.report.fields.get(f.key) ?? '';
                       const isEditing = gridEditCell?.row === trade.index && gridEditCell?.field === f.key;
                       const editable = isGridCellEditable(f.key);
+                      const hasError = failedGridKeys.has(f.key);
 
                       if (isEditing) {
                         return (
@@ -305,7 +634,7 @@ function App() {
                       return (
                         <td
                           key={f.key}
-                          className={`mono ${editable ? 'grid-cell-editable' : ''}`}
+                          className={`mono ${editable ? 'grid-cell-editable' : ''}${hasError ? ' grid-cell-error' : ''}`}
                           onDoubleClick={(e) => {
                             if (editable) {
                               e.stopPropagation();
@@ -322,7 +651,8 @@ function App() {
                       {trade.failCount}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
