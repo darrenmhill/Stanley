@@ -609,7 +609,7 @@ function App() {
 
                       if (isEditing) {
                         return (
-                          <td key={f.key} className="grid-edit-td">
+                          <td key={f.key} className="grid-edit-td" onClick={(e) => e.stopPropagation()}>
                             <input
                               className="grid-edit-input"
                               value={gridEditValue}
@@ -621,6 +621,10 @@ function App() {
                               onClick={(e) => e.stopPropagation()}
                               autoFocus
                             />
+                            <div className="grid-edit-actions">
+                              <button className="btn-inline btn-save" onClick={(e) => { e.stopPropagation(); saveGridEdit(); }}>Save</button>
+                              <button className="btn-inline btn-cancel" onClick={(e) => { e.stopPropagation(); cancelGridEdit(); }}>Cancel</button>
+                            </div>
                           </td>
                         );
                       }
@@ -644,6 +648,18 @@ function App() {
                           title={editable ? 'Double-click to edit' : val}
                         >
                           {displayVal}
+                          {editable && (
+                            <button
+                              className="grid-cell-edit-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startGridEdit(trade.index, f.key, val);
+                              }}
+                              aria-label={`Edit ${f.key}`}
+                            >
+                              &#9998;
+                            </button>
+                          )}
                         </td>
                       );
                     })}
