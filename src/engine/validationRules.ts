@@ -1228,7 +1228,7 @@ function buildPriceRules(): RuleFn[] {
     return {
       ruleId: 'ASIC-088', field: 'OptnTp', category: 'Price',
       description: 'Option Type (CALL/PUTO) is mandatory when Contract Type is OPTN',
-      severity: 'ERROR',
+      severity: 'WARNING',
       status: ot ? 'PASS' : 'FAIL',
       actual: ot, expected: 'CALL or PUTO',
     };
@@ -1265,7 +1265,7 @@ function buildPriceRules(): RuleFn[] {
     return {
       ruleId: 'ASIC-091', field: 'OptnExrcStyle', category: 'Price',
       description: 'Option Exercise Style is mandatory when Contract Type is OPTN',
-      severity: 'ERROR',
+      severity: 'WARNING',
       status: es ? 'PASS' : 'FAIL',
       actual: es, expected: 'One of: AMER, EURO, BERM, ASIA',
     };
