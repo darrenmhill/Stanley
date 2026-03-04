@@ -308,9 +308,11 @@ function parseTradDataElement(tradData: Element, xml: string, doc: Document): Pa
 
   // Option fields
   fields.set('StrkPric',
-    txData ? getTextContent(txData, 'Optn', 'StrkPric', 'Dcml') : null);
+    txData ? (getTextContent(txData, 'Optn', 'StrkPric', 'Dcml') ??
+              getTextContent(txData, 'Optn', 'StrkPric', 'MntryVal', 'Amt')) : null);
   fields.set('StrkPricCcy',
-    txData ? getTextContent(txData, 'Optn', 'StrkPric', 'MntryVal', 'Ccy') : null);
+    txData ? (getTextContent(txData, 'Optn', 'StrkPric', 'MntryVal', 'Ccy') ??
+              getAttributeValue(txData, 'Ccy', 'Optn', 'StrkPric', 'MntryVal', 'Amt')) : null);
   fields.set('OptnTp',
     txData ? getTextContent(txData, 'Optn', 'Tp') : null);
   fields.set('OptnExrcStyle',
