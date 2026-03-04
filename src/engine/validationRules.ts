@@ -428,15 +428,15 @@ function buildIdentifierRules(): RuleFn[] {
     };
   });
 
-  // ASIC-025: Prior UTI mandatory for non-NEWT actions
+  // ASIC-025: Prior UTI mandatory only for NEWT + ALOC (allocation)
   rules.push((r) => {
-    if (!r.actionType || r.actionType === 'NEWT') {
+    if (r.actionType !== 'NEWT' || r.fields.get('EvtTp') !== 'ALOC') {
       return na('ASIC-025', 'PrrUTI', 'Identifier',
-        'Prior UTI is mandatory for MODI, CORR, TERM, REVI, VALU, EROR actions',
-        val(r.fields.get('PrrUTI')), 'Required for non-NEWT actions');
+        'Prior UTI is mandatory when Action Type = NEWT and Event Type = ALOC',
+        val(r.fields.get('PrrUTI')), 'Required only for NEWT + ALOC');
     }
     return mandatory('ASIC-025', 'PrrUTI', 'Identifier',
-      'Prior UTI is mandatory for MODI, CORR, TERM, REVI, VALU, EROR actions',
+      'Prior UTI is mandatory when Action Type = NEWT and Event Type = ALOC',
       r.fields.get('PrrUTI'));
   });
 
@@ -1611,18 +1611,6 @@ function buildActionEventRules(): RuleFn[] {
       actual: upi,
       expected: 'No UPI for EROR action',
     };
-  });
-
-  // ASIC-117: REVI (Revive) requires Prior UTI
-  rules.push((r) => {
-    if (r.actionType !== 'REVI') {
-      return na('ASIC-117', 'PrrUTI (REVI)', 'Action & Event',
-        'Revive (REVI) action type requires Prior UTI',
-        null, 'Applicable only for REVI');
-    }
-    return mandatory('ASIC-117', 'PrrUTI (REVI)', 'Action & Event',
-      'Revive (REVI) action type requires Prior UTI',
-      r.fields.get('PrrUTI'));
   });
 
   // ASIC-118: VALU action should have valuation data
