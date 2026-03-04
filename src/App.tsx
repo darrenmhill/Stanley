@@ -45,7 +45,7 @@ const RULE_CATEGORIES: { category: RuleCategory; range: string; description: str
   { category: 'Notional & Quantity', range: 'ASIC-066 to ASIC-078', description: 'Notional amounts/currencies for both legs, numeric/non-negative checks, FX-specific requirements' },
   { category: 'Price', range: 'ASIC-079 to ASIC-095', description: 'Price, fixed rates, spreads, strike price, option type/exercise style/premium, exchange rate' },
   { category: 'Valuation', range: 'ASIC-096 to ASIC-105', description: 'Valuation amount/currency/timestamp, delta range, VALU action mandates, valuation type' },
-  { category: 'Action & Event', range: 'ASIC-106 to ASIC-118', description: 'Action type detection, event type per-action cross-validation, EROR/POSC/REVI checks' },
+  { category: 'Action & Event', range: 'ASIC-106 to ASIC-118', description: 'Action type detection, event type per-action cross-validation, EROR/REVI checks' },
   { category: 'Collateral', range: 'ASIC-119 to ASIC-124', description: 'Initial/variation margin posted/received, portfolio code' },
   { category: 'Package', range: 'ASIC-125 to ASIC-130', description: 'Package ID, package price/spread, IRS fixed rate/spread checks, FX exchange rate' },
 ];

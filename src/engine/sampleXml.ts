@@ -186,7 +186,7 @@ function generateCFI(): string {
 function generateSingleTrade(idx: number): string {
   const errors = getErrorsForTrade(idx);
   const action = pickWeighted();
-  const isExit = ['TERM', 'EROR', 'POSC'].includes(action.code);
+  const isExit = ['TERM', 'EROR'].includes(action.code);
   const isError = action.code === 'EROR';
   const isNonNewt = action.code !== 'NEWT';
 

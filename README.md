@@ -6,7 +6,7 @@ A browser-based validation tool for ASIC (Australian Securities & Investments Co
 
 - **XML Parsing** — Parses `auth.030.001.04` messages with full namespace-aware traversal following the ASIC ISO 20022 Mapping Document v1.1 (Feb 2025)
 - **130 Validation Rules** — Comprehensive rule coverage across 11 categories
-- **Action-Type Awareness** — Rules are conditional on action type (NEWT, MODI, CORR, TERM, VALU, EROR, POSC, REVI)
+- **Action-Type Awareness** — Rules are conditional on action type (NEWT, MODI, CORR, TERM, VALU, EROR, REVI)
 - **Inline Fix Editing** — Failed fields with known XML paths can be edited inline and re-validated
 - **Sample XML** — Built-in sample with deliberate errors for demonstration
 - **File Upload** — Upload `.xml` files directly for validation
@@ -24,7 +24,7 @@ A browser-based validation tool for ASIC (Australian Securities & Investments Co
 | Notional & Quantity | ASIC-066 to ASIC-078 | Notional amounts/currencies for both legs, numeric/non-negative checks, FX-specific requirements |
 | Price | ASIC-079 to ASIC-095 | Price, fixed rates, spreads, strike price, option type/exercise style/premium, exchange rate |
 | Valuation | ASIC-096 to ASIC-105 | Valuation amount/currency/timestamp, delta range, VALU action mandates, valuation type |
-| Action & Event | ASIC-106 to ASIC-118 | Action type detection, event type per-action cross-validation, EROR/POSC/REVI checks |
+| Action & Event | ASIC-106 to ASIC-118 | Action type detection, event type per-action cross-validation, EROR/REVI checks |
 | Collateral | ASIC-119 to ASIC-124 | Initial/variation margin posted/received, portfolio code |
 | Package | ASIC-125 to ASIC-130 | Package ID, package price/spread, IRS fixed rate/spread checks, FX exchange rate |
 
@@ -36,7 +36,7 @@ The parser expects the correct ISO 20022 hierarchy per the ASIC mapping document
 DerivsTradRpt
   TradData
     Rpt
-      {Action}                          (New, Mod, Crrctn, Termntn, ValtnUpd, Err, PrtOut, Rvv)
+      {Action}                          (New, Mod, Crrctn, Termntn, ValtnUpd, Err, Rvv)
         RptgTmStmp
         CptrPtySpcfcData
           CtrPty

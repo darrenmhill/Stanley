@@ -35,7 +35,6 @@ const ACTION_MAP: Record<string, string> = {
   Termntn: 'TERM',
   ValtnUpd: 'VALU',
   Err: 'EROR',
-  PrtOut: 'POSC',
   Rvv: 'REVI',
 };
 

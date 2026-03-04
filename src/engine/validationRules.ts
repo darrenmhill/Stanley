@@ -60,7 +60,7 @@ const UTI_REGEX = /^[A-Z0-9]{20}[A-Za-z0-9]{1,32}$/;
 const UPI_REGEX = /^[A-Z0-9]{12}$/;
 const MIC_REGEX = /^[A-Z0-9]{4}$/;
 
-const EXIT_ACTIONS = ['TERM', 'EROR', 'POSC'];
+const EXIT_ACTIONS = ['TERM', 'EROR'];
 
 // VALU actions require identifiers + valuation data but NOT full product/trade data.
 // Per ASIC Mapping Document v1.1: product/trade fields are C (conditional) for VALU.
@@ -432,11 +432,11 @@ function buildIdentifierRules(): RuleFn[] {
   rules.push((r) => {
     if (!r.actionType || r.actionType === 'NEWT') {
       return na('ASIC-025', 'PrrUTI', 'Identifier',
-        'Prior UTI is mandatory for MODI, CORR, TERM, REVI, VALU, EROR, POSC actions',
+        'Prior UTI is mandatory for MODI, CORR, TERM, REVI, VALU, EROR actions',
         val(r.fields.get('PrrUTI')), 'Required for non-NEWT actions');
     }
     return mandatory('ASIC-025', 'PrrUTI', 'Identifier',
-      'Prior UTI is mandatory for MODI, CORR, TERM, REVI, VALU, EROR, POSC actions',
+      'Prior UTI is mandatory for MODI, CORR, TERM, REVI, VALU, EROR actions',
       r.fields.get('PrrUTI'));
   });
 
@@ -1454,7 +1454,7 @@ function buildActionEventRules(): RuleFn[] {
     severity: 'ERROR',
     status: r.actionType ? 'PASS' : 'FAIL',
     actual: r.actionType,
-    expected: 'One of: NEWT, MODI, CORR, TERM, VALU, EROR, POSC, REVI',
+    expected: 'One of: NEWT, MODI, CORR, TERM, VALU, EROR, REVI',
   }));
 
   // ASIC-107: Event Type — allowable values (if provided)
@@ -1610,24 +1610,6 @@ function buildActionEventRules(): RuleFn[] {
       status: !upi ? 'PASS' : 'FAIL',
       actual: upi,
       expected: 'No UPI for EROR action',
-    };
-  });
-
-  // ASIC-116: POSC action minimal data check
-  rules.push((r) => {
-    if (r.actionType !== 'POSC') {
-      return na('ASIC-116', 'ActionType (POSC)', 'Action & Event',
-        'Position Component (POSC) action should have UTI and counterparty data',
-        null, 'Applicable only for POSC');
-    }
-    const uti = val(r.fields.get('UTI'));
-    return {
-      ruleId: 'ASIC-116', field: 'ActionType (POSC)', category: 'Action & Event',
-      description: 'Position Component (POSC) action must have UTI',
-      severity: 'ERROR',
-      status: uti ? 'PASS' : 'FAIL',
-      actual: uti,
-      expected: 'UTI required for POSC',
     };
   });
 
