@@ -375,7 +375,8 @@ export function parseDerivativesTradeReport(xml: string): ParsedReport {
 }
 
 /**
- * Parse all TradData elements from a multi-trade XML document.
+ * Parse all trade reports from a multi-trade XML document.
+ * Handles both multi-TradData files and multi-Rpt files (multiple Rpt within one TradData).
  * Returns an array of {index, report} objects. Validation is done by the caller.
  */
 export function parseAllTradeReports(xml: string): { index: number; report: ParsedReport }[] {
@@ -387,25 +388,15 @@ export function parseAllTradeReports(xml: string): { index: number; report: Pars
     throw new Error(`XML Parse Error: ${parseError.textContent}`);
   }
 
-  const root =
-    doc.getElementsByTagNameNS(NS, 'DerivsTradRpt')[0] ??
-    doc.getElementsByTagName('DerivsTradRpt')[0] ??
-    doc.documentElement;
+  const containers = getAllReportContainers(doc);
 
-  const tradDataElements = [
-    ...Array.from(root.getElementsByTagNameNS(NS, 'TradData')),
-    ...(root.getElementsByTagNameNS(NS, 'TradData').length === 0
-      ? Array.from(root.getElementsByTagName('TradData'))
-      : []),
-  ];
-
-  if (tradDataElements.length === 0) {
-    throw new Error('No <TradData> elements found in the XML document.');
+  if (containers.length === 0) {
+    throw new Error('No <TradData> or <Rpt> elements found in the XML document.');
   }
 
-  return tradDataElements.map((tradDataEl, index) => {
+  return containers.map((container, index) => {
     try {
-      return { index, report: parseTradDataElement(tradDataEl, xml, doc) };
+      return { index, report: parseTradDataElement(container, xml, doc) };
     } catch {
       // Return a minimal report for malformed trade elements so other trades still display
       return { index, report: { raw: xml, doc, actionType: null, fields: new Map<string, string | null>() } as ParsedReport };
@@ -479,16 +470,34 @@ export const FIELD_PATHS: Record<string, { base: 'action' | 'counterparty' | 'co
 };
 
 /**
- * Collect all TradData elements from parsed XML, respecting namespaces.
+ * Collect all report containers (Rpt elements, or TradData when no Rpt wrapper).
+ * A single TradData can contain multiple Rpt elements — each is a separate trade.
  */
-function getAllTradDataElements(doc: Document): Element[] {
+function getAllReportContainers(doc: Document): Element[] {
   const root =
     doc.getElementsByTagNameNS(NS, 'DerivsTradRpt')[0] ??
     doc.getElementsByTagName('DerivsTradRpt')[0] ??
     doc.documentElement;
 
   const nsElements = Array.from(root.getElementsByTagNameNS(NS, 'TradData'));
-  return nsElements.length > 0 ? nsElements : Array.from(root.getElementsByTagName('TradData'));
+  const tradDataElements = nsElements.length > 0 ? nsElements : Array.from(root.getElementsByTagName('TradData'));
+
+  const containers: Element[] = [];
+  for (const tradData of tradDataElements) {
+    const rpts: Element[] = [];
+    for (let i = 0; i < tradData.children.length; i++) {
+      if (tradData.children[i].localName === 'Rpt') {
+        rpts.push(tradData.children[i]);
+      }
+    }
+    if (rpts.length === 0) {
+      // No Rpt wrapper — action elements are directly under TradData
+      containers.push(tradData);
+    } else {
+      containers.push(...rpts);
+    }
+  }
+  return containers;
 }
 
 /**
@@ -502,11 +511,11 @@ export function updateFieldInXml(xml: string, fieldName: string, newValue: strin
   const parser = new DOMParser();
   const doc = parser.parseFromString(xml, 'text/xml');
 
-  const tradDataElements = getAllTradDataElements(doc);
-  const tradData = tradDataElements[tradeIndex];
-  if (!tradData) return xml;
+  const containers = getAllReportContainers(doc);
+  const container = containers[tradeIndex];
+  if (!container) return xml;
 
-  const actionContainer = findActionContainer(tradData);
+  const actionContainer = findActionContainer(container);
   const actionEl = findActionElement(actionContainer);
   if (!actionEl) return xml;
 
